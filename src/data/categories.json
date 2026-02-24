@@ -1,0 +1,42 @@
+[
+  {
+    "id": "cartoons",
+    "name": "Cartoons",
+    "iconUrl": "categories/cartoons.png",
+    "color": "#FFD93D",
+    "sortOrder": 1,
+    "isActive": true
+  },
+  {
+    "id": "live-action",
+    "name": "Live Action",
+    "iconUrl": "categories/live-action.png",
+    "color": "#FF6B6B",
+    "sortOrder": 2,
+    "isActive": true
+  },
+  {
+    "id": "movies",
+    "name": "Movies",
+    "iconUrl": "categories/movies.png",
+    "color": "#C084FC",
+    "sortOrder": 3,
+    "isActive": true
+  },
+  {
+    "id": "educational",
+    "name": "Educational",
+    "iconUrl": "categories/educational.png",
+    "color": "#4ADE80",
+    "sortOrder": 4,
+    "isActive": true
+  },
+  {
+    "id": "music",
+    "name": "Music & Songs",
+    "iconUrl": "categories/music.png",
+    "color": "#60A5FA",
+    "sortOrder": 5,
+    "isActive": true
+  }
+]

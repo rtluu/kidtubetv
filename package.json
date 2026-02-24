@@ -1,0 +1,50 @@
+{
+  "name": "kidtubetv",
+  "main": "expo-router/entry",
+  "version": "0.1.0",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@expo-google-fonts/fredoka": "^0.4.1",
+    "@expo-google-fonts/press-start-2p": "^0.4.1",
+    "@expo/vector-icons": "^15.0.3",
+    "@netlify/blobs": "^10.7.0",
+    "@netlify/functions": "^5.1.2",
+    "@react-native-async-storage/async-storage": "^2.1.2",
+    "@react-navigation/native": "^7.1.8",
+    "@tanstack/react-query": "^5.67.2",
+    "expo": "~54.0.33",
+    "expo-av": "~15.1.7",
+    "expo-constants": "~18.0.13",
+    "expo-font": "~14.0.11",
+    "expo-linking": "~8.0.11",
+    "expo-router": "~6.0.23",
+    "expo-splash-screen": "~31.0.13",
+    "expo-status-bar": "~3.0.9",
+    "expo-video": "~2.2.2",
+    "expo-web-browser": "~15.0.10",
+    "lottie-react-native": "^7.2.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-reanimated": "~4.1.1",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.16.0",
+    "react-native-web": "~0.21.0",
+    "react-native-web-webview": "^1.0.2",
+    "react-native-webview": "^13.13.5",
+    "react-native-worklets": "0.5.1",
+    "react-native-youtube-iframe": "^2.4.1",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.0",
+    "react-test-renderer": "19.1.0",
+    "typescript": "~5.9.2"
+  },
+  "private": true
+}

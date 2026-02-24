@@ -1,0 +1,20 @@
+[
+  {
+    "id": "nickelodeon",
+    "name": "Nickelodeon",
+    "shortName": "Nick",
+    "logoUrl": "networks/nickelodeon.png",
+    "color": "#FF6600",
+    "sortOrder": 1,
+    "isActive": true
+  },
+  {
+    "id": "pbs-kids",
+    "name": "PBS Kids",
+    "shortName": "PBS",
+    "logoUrl": "networks/pbs.png",
+    "color": "#5CB85C",
+    "sortOrder": 2,
+    "isActive": true
+  }
+]

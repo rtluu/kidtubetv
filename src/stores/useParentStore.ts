@@ -1,0 +1,167 @@
+import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Video, Playlist } from '@src/types/video';
+
+interface ParentState {
+  // Content management
+  userVideos: Video[];
+  addVideo: (video: Video) => void;
+  removeVideo: (videoId: string) => void;
+
+  // Playlists
+  playlists: Playlist[];
+  createPlaylist: (title: string) => void;
+  updatePlaylistTitle: (id: string, title: string) => void;
+  deletePlaylist: (id: string) => void;
+  reorderPlaylists: (fromIndex: number, toIndex: number) => void;
+  addVideoToPlaylist: (playlistId: string, videoId: string) => void;
+  removeVideoFromPlaylist: (playlistId: string, videoId: string) => void;
+  reorderPlaylistVideos: (playlistId: string, fromIndex: number, toIndex: number) => void;
+
+  // Daily time limit (minutes, null = unlimited)
+  dailyTimeLimitMinutes: number | null;
+  setDailyTimeLimit: (minutes: number | null) => void;
+
+  // Bedtime
+  bedtimeEnabled: boolean;
+  bedtimeHour: number;
+  bedtimeMinute: number;
+  setBedtime: (hour: number, minute: number) => void;
+  toggleBedtime: (enabled: boolean) => void;
+
+  // Break reminders
+  breakReminderEnabled: boolean;
+  breakReminderMinutes: number;
+  setBreakReminder: (minutes: number) => void;
+  toggleBreakReminder: (enabled: boolean) => void;
+
+  // Video start times (seconds, keyed by video id)
+  videoStartTimes: Record<string, number>;
+  setVideoStartTime: (videoId: string, seconds: number) => void;
+  clearVideoStartTime: (videoId: string) => void;
+
+  // Custom sort orders for library groups (keyed by group id, e.g. network or channel id)
+  librarySortOrders: Record<string, string[]>;
+  setLibrarySortOrder: (groupKey: string, videoIds: string[]) => void;
+
+  // Auto-play
+  autoPlayEnabled: boolean;
+  toggleAutoPlay: (enabled: boolean) => void;
+}
+
+export const useParentStore = create<ParentState>()(
+  persist(
+    (set) => ({
+      userVideos: [],
+      addVideo: (video) =>
+        set((state) => ({ userVideos: [...state.userVideos, video] })),
+      removeVideo: (videoId) =>
+        set((state) => ({
+          userVideos: state.userVideos.filter((v) => v.id !== videoId),
+          // Also remove from any playlists
+          playlists: state.playlists.map((p) => ({
+            ...p,
+            videoIds: p.videoIds.filter((id) => id !== videoId),
+          })),
+        })),
+
+      playlists: [],
+      createPlaylist: (title) =>
+        set((state) => ({
+          playlists: [
+            ...state.playlists,
+            {
+              id: `playlist-${Date.now()}`,
+              title,
+              videoIds: [],
+              createdAt: Date.now(),
+              sortOrder: state.playlists.length,
+            },
+          ],
+        })),
+      updatePlaylistTitle: (id, title) =>
+        set((state) => ({
+          playlists: state.playlists.map((p) =>
+            p.id === id ? { ...p, title } : p
+          ),
+        })),
+      deletePlaylist: (id) =>
+        set((state) => ({
+          playlists: state.playlists.filter((p) => p.id !== id),
+        })),
+      reorderPlaylists: (fromIndex, toIndex) =>
+        set((state) => {
+          const arr = [...state.playlists];
+          const [moved] = arr.splice(fromIndex, 1);
+          arr.splice(toIndex, 0, moved);
+          return { playlists: arr.map((p, i) => ({ ...p, sortOrder: i })) };
+        }),
+      addVideoToPlaylist: (playlistId, videoId) =>
+        set((state) => ({
+          playlists: state.playlists.map((p) =>
+            p.id === playlistId && !p.videoIds.includes(videoId)
+              ? { ...p, videoIds: [...p.videoIds, videoId] }
+              : p
+          ),
+        })),
+      removeVideoFromPlaylist: (playlistId, videoId) =>
+        set((state) => ({
+          playlists: state.playlists.map((p) =>
+            p.id === playlistId
+              ? { ...p, videoIds: p.videoIds.filter((id) => id !== videoId) }
+              : p
+          ),
+        })),
+      reorderPlaylistVideos: (playlistId, fromIndex, toIndex) =>
+        set((state) => ({
+          playlists: state.playlists.map((p) => {
+            if (p.id !== playlistId) return p;
+            const ids = [...p.videoIds];
+            const [moved] = ids.splice(fromIndex, 1);
+            ids.splice(toIndex, 0, moved);
+            return { ...p, videoIds: ids };
+          }),
+        })),
+
+      dailyTimeLimitMinutes: null,
+      setDailyTimeLimit: (minutes) => set({ dailyTimeLimitMinutes: minutes }),
+
+      bedtimeEnabled: false,
+      bedtimeHour: 20,
+      bedtimeMinute: 0,
+      setBedtime: (hour, minute) =>
+        set({ bedtimeHour: hour, bedtimeMinute: minute }),
+      toggleBedtime: (enabled) => set({ bedtimeEnabled: enabled }),
+
+      breakReminderEnabled: false,
+      breakReminderMinutes: 30,
+      setBreakReminder: (minutes) => set({ breakReminderMinutes: minutes }),
+      toggleBreakReminder: (enabled) => set({ breakReminderEnabled: enabled }),
+
+      videoStartTimes: {},
+      setVideoStartTime: (videoId, seconds) =>
+        set((state) => ({
+          videoStartTimes: { ...state.videoStartTimes, [videoId]: seconds },
+        })),
+      clearVideoStartTime: (videoId) =>
+        set((state) => {
+          const { [videoId]: _, ...rest } = state.videoStartTimes;
+          return { videoStartTimes: rest };
+        }),
+
+      librarySortOrders: {},
+      setLibrarySortOrder: (groupKey, videoIds) =>
+        set((state) => ({
+          librarySortOrders: { ...state.librarySortOrders, [groupKey]: videoIds },
+        })),
+
+      autoPlayEnabled: true,
+      toggleAutoPlay: (enabled) => set({ autoPlayEnabled: enabled }),
+    }),
+    {
+      name: 'kidtubetv-parent',
+      storage: createJSONStorage(() => AsyncStorage),
+    }
+  )
+);
