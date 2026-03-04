@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Video, Playlist } from '@src/types/video';
+import { GateFrequency } from '@src/types/learningGate';
 
 interface ParentState {
   // Content management
@@ -48,6 +49,16 @@ interface ParentState {
   // Auto-play
   autoPlayEnabled: boolean;
   toggleAutoPlay: (enabled: boolean) => void;
+
+  // Learning Gate
+  learningGateEnabled: boolean;
+  childAge: number;
+  gateFrequency: GateFrequency;
+  videosPerGate: number;
+  setLearningGateEnabled: (v: boolean) => void;
+  setChildAge: (age: number) => void;
+  setGateFrequency: (f: GateFrequency) => void;
+  setVideosPerGate: (n: number) => void;
 }
 
 export const useParentStore = create<ParentState>()(
@@ -158,6 +169,15 @@ export const useParentStore = create<ParentState>()(
 
       autoPlayEnabled: true,
       toggleAutoPlay: (enabled) => set({ autoPlayEnabled: enabled }),
+
+      learningGateEnabled: false,
+      childAge: 6,
+      gateFrequency: 'every' as GateFrequency,
+      videosPerGate: 3,
+      setLearningGateEnabled: (v) => set({ learningGateEnabled: v }),
+      setChildAge: (age) => set({ childAge: age }),
+      setGateFrequency: (f) => set({ gateFrequency: f }),
+      setVideosPerGate: (n) => set({ videosPerGate: n }),
     }),
     {
       name: 'kidtubetv-parent',

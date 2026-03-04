@@ -16,6 +16,8 @@ import { colors, spacing, borderRadius, shadows, typography } from '@src/constan
 import YouTubePlayer, { YouTubePlayerHandle, PlayerState } from '@src/components/YouTubePlayer';
 import PremiumPlayerOverlay from '@src/components/PremiumPlayerOverlay';
 import { useParentStore } from '@src/stores/useParentStore';
+import { useLearningGateStore } from '@src/stores/useLearningGateStore';
+import LearningGate from '@src/components/LearningGate/LearningGate';
 
 // Portal support — renders overlay at document.body to escape all
 // parent stacking contexts (RN Web Views add z-index:0 which traps children)
@@ -64,6 +66,16 @@ export default function HomeVideoCard({
   // when the same video appears in multiple sections (playlist + channel).
   const cardInstanceId = instanceId ?? video.id;
   const videoStartTimes = useParentStore((s) => s.videoStartTimes);
+  const learningGateEnabled = useParentStore((s) => s.learningGateEnabled);
+  const childAge = useParentStore((s) => s.childAge);
+  const gateFrequency = useParentStore((s) => s.gateFrequency);
+  const videosPerGate = useParentStore((s) => s.videosPerGate);
+  const shouldShowGate = useLearningGateStore((s) => s.shouldShowGate);
+  const incrementWatched = useLearningGateStore((s) => s.incrementWatched);
+  const markSessionPassed = useLearningGateStore((s) => s.markSessionPassed);
+
+  const [showGate, setShowGate] = useState(false);
+  const [pendingExpand, setPendingExpand] = useState(false);
   const thumbnailHeight = Math.round(cardWidth * (9 / 16));
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const expandedPlayerRef = useRef<YouTubePlayerHandle>(null);
@@ -196,11 +208,33 @@ export default function HomeVideoCard({
 
   const handlePress = useCallback(() => {
     if (isExpanded) return;
+    const gateConfig = { learningGateEnabled, gateFrequency, videosPerGate };
+    if (shouldShowGate(gateConfig)) {
+      setShowGate(true);
+      setPendingExpand(true);
+      return;
+    }
     if (!isPreview && onPreviewStart) {
       onPreviewStart(cardInstanceId);
     }
     onExpand?.(cardInstanceId);
-  }, [isExpanded, isPreview, onPreviewStart, onExpand, cardInstanceId]);
+  }, [isExpanded, isPreview, onPreviewStart, onExpand, cardInstanceId, learningGateEnabled, gateFrequency, videosPerGate, shouldShowGate]);
+
+  const handleGatePass = useCallback(() => {
+    setShowGate(false);
+    if (gateFrequency === 'session') {
+      markSessionPassed();
+    } else {
+      incrementWatched();
+    }
+    if (pendingExpand) {
+      setPendingExpand(false);
+      if (!isPreview && onPreviewStart) {
+        onPreviewStart(cardInstanceId);
+      }
+      onExpand?.(cardInstanceId);
+    }
+  }, [pendingExpand, isPreview, onPreviewStart, onExpand, cardInstanceId, gateFrequency, incrementWatched, markSessionPassed]);
 
   const handleCollapse = useCallback(() => {
     onCollapse?.();
@@ -395,6 +429,15 @@ export default function HomeVideoCard({
       {expandedOverlay && createPortal && typeof document !== 'undefined'
         ? createPortal(expandedOverlay, document.body)
         : expandedOverlay}
+
+      {/* ── Learning Gate modal — portaled to document.body on web to escape
+           the ScrollView's transform stacking context ── */}
+      {createPortal && typeof document !== 'undefined'
+        ? createPortal(
+            <LearningGate visible={showGate} childAge={childAge} onPass={handleGatePass} />,
+            document.body
+          )
+        : <LearningGate visible={showGate} childAge={childAge} onPass={handleGatePass} />}
     </View>
   );
 }

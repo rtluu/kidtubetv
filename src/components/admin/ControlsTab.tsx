@@ -4,6 +4,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { colors, spacing, borderRadius, typography, shadows } from '@src/constants/theme';
 import { useParentStore } from '@src/stores/useParentStore';
 import { useResponsive } from '@src/hooks/useResponsive';
+import { GateFrequency } from '@src/types/learningGate';
 
 const TIME_LIMIT_OPTIONS: { label: string; value: number | null }[] = [
   { label: '15 min', value: 15 },
@@ -59,6 +60,14 @@ export default function ControlsTab() {
   const toggleBreakReminder = useParentStore((s) => s.toggleBreakReminder);
   const autoPlayEnabled = useParentStore((s) => s.autoPlayEnabled);
   const toggleAutoPlay = useParentStore((s) => s.toggleAutoPlay);
+  const learningGateEnabled = useParentStore((s) => s.learningGateEnabled);
+  const setLearningGateEnabled = useParentStore((s) => s.setLearningGateEnabled);
+  const childAge = useParentStore((s) => s.childAge);
+  const setChildAge = useParentStore((s) => s.setChildAge);
+  const gateFrequency = useParentStore((s) => s.gateFrequency);
+  const setGateFrequency = useParentStore((s) => s.setGateFrequency);
+  const videosPerGate = useParentStore((s) => s.videosPerGate);
+  const setVideosPerGate = useParentStore((s) => s.setVideosPerGate);
 
   const bedtimeLabel =
     BEDTIME_OPTIONS.find(
@@ -202,6 +211,113 @@ export default function ControlsTab() {
         )}
       </View>
 
+      {/* Learning Gate */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <FontAwesome name="graduation-cap" size={scaled.iconSize} color={colors.crtBlue} />
+          <Text style={[styles.sectionTitle, { fontSize: scaled.sectionTitleFont }]}>Learning Gate</Text>
+        </View>
+
+        {/* Master toggle */}
+        <View style={styles.controlRow}>
+          <View style={styles.controlLabel}>
+            <Text style={[styles.controlTitle, { fontSize: scaled.controlTitleFont }]}>Learning Gate</Text>
+            <Text style={[styles.controlDescription, { fontSize: scaled.descFont }]}>
+              {learningGateEnabled
+                ? 'Kids answer a question before watching'
+                : 'Videos play without any challenge'}
+            </Text>
+          </View>
+          <Switch
+            value={learningGateEnabled}
+            onValueChange={setLearningGateEnabled}
+            trackColor={{ false: colors.border, true: colors.crtBlue }}
+            thumbColor="#fff"
+          />
+        </View>
+
+        {learningGateEnabled && (
+          <>
+            {/* Child Age stepper */}
+            <View style={styles.controlRow}>
+              <View style={styles.controlLabel}>
+                <Text style={[styles.controlTitle, { fontSize: scaled.controlTitleFont }]}>Child's Age</Text>
+                <Text style={[styles.controlDescription, { fontSize: scaled.descFont }]}>
+                  {childAge <= 6 ? 'Counting, colors & shapes' : 'Math, spelling & knowledge'}
+                </Text>
+              </View>
+              <View style={styles.stepper}>
+                <Pressable
+                  style={[styles.stepperButton, childAge <= 3 && styles.stepperButtonDisabled]}
+                  onPress={() => setChildAge(Math.max(3, childAge - 1))}
+                  disabled={childAge <= 3}
+                >
+                  <Text style={[styles.stepperButtonText, childAge <= 3 && styles.stepperButtonTextDisabled]}>−</Text>
+                </Pressable>
+                <Text style={[styles.stepperValue, { fontSize: scaled.controlTitleFont }]}>
+                  Age {childAge}
+                </Text>
+                <Pressable
+                  style={[styles.stepperButton, childAge >= 12 && styles.stepperButtonDisabled]}
+                  onPress={() => setChildAge(Math.min(12, childAge + 1))}
+                  disabled={childAge >= 12}
+                >
+                  <Text style={[styles.stepperButtonText, childAge >= 12 && styles.stepperButtonTextDisabled]}>+</Text>
+                </Pressable>
+              </View>
+            </View>
+
+            {/* Frequency selector */}
+            <View style={styles.controlRow}>
+              <View style={styles.controlLabel}>
+                <Text style={[styles.controlTitle, { fontSize: scaled.controlTitleFont }]}>Frequency</Text>
+                <Text style={[styles.controlDescription, { fontSize: scaled.descFont }]}>
+                  How often to show the challenge
+                </Text>
+              </View>
+            </View>
+            <View style={styles.optionGrid}>
+              {([
+                { label: 'Every video', value: 'every' as GateFrequency },
+                { label: 'Every 2 videos', value: 'every-n' as GateFrequency, n: 2 },
+                { label: 'Every 3 videos', value: 'every-n' as GateFrequency, n: 3 },
+                { label: 'Every 5 videos', value: 'every-n' as GateFrequency, n: 5 },
+                { label: 'Once per session', value: 'session' as GateFrequency },
+              ] as Array<{ label: string; value: GateFrequency; n?: number }>).map((opt) => {
+                const isActive =
+                  opt.value === 'every-n'
+                    ? gateFrequency === 'every-n' && videosPerGate === opt.n
+                    : gateFrequency === opt.value;
+                return (
+                  <Pressable
+                    key={opt.label}
+                    style={[
+                      styles.optionChip,
+                      { paddingHorizontal: scaled.chipPadH, paddingVertical: scaled.chipPadV },
+                      isActive && styles.optionChipActive,
+                    ]}
+                    onPress={() => {
+                      setGateFrequency(opt.value);
+                      if (opt.n !== undefined) setVideosPerGate(opt.n);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.optionChipText,
+                        { fontSize: scaled.chipFont },
+                        isActive && styles.optionChipTextActive,
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </>
+        )}
+      </View>
+
       {/* Playback Controls */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
@@ -309,5 +425,37 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: 40,
+  },
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  stepperButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.dark,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepperButtonDisabled: {
+    backgroundColor: colors.border,
+  },
+  stepperButtonText: {
+    color: '#fff',
+    fontSize: 20,
+    lineHeight: 22,
+    fontFamily: typography.body.fontFamily,
+  },
+  stepperButtonTextDisabled: {
+    color: colors.textSecondary,
+  },
+  stepperValue: {
+    fontFamily: typography.subheading.fontFamily,
+    fontSize: 15,
+    color: colors.textPrimary,
+    minWidth: 60,
+    textAlign: 'center',
   },
 });

@@ -7,6 +7,11 @@ import {
   Platform,
   useWindowDimensions,
 } from 'react-native';
+
+let createPortal: any = null;
+if (Platform.OS === 'web') {
+  try { createPortal = require('react-dom').createPortal; } catch {}
+}
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,6 +23,8 @@ import { fetchLibraryVideos } from '@src/services/library';
 import { usePlayerStore } from '@src/stores/usePlayerStore';
 import { useHistoryStore } from '@src/stores/useHistoryStore';
 import { useParentStore } from '@src/stores/useParentStore';
+import { useLearningGateStore } from '@src/stores/useLearningGateStore';
+import LearningGate from '@src/components/LearningGate/LearningGate';
 import { formatDuration } from '@src/utils/format';
 import VideoCard from '@src/components/VideoCard';
 import YouTubePlayer from '@src/components/YouTubePlayer';
@@ -50,12 +57,25 @@ export default function PlayerScreen() {
   const addEntry = useHistoryStore((s) => s.addEntry);
   const videoStartTimes = useParentStore((s) => s.videoStartTimes);
   const userVideos = useParentStore((s) => s.userVideos);
+  const learningGateEnabled = useParentStore((s) => s.learningGateEnabled);
+  const childAge = useParentStore((s) => s.childAge);
+  const gateFrequency = useParentStore((s) => s.gateFrequency);
+  const videosPerGate = useParentStore((s) => s.videosPerGate);
+  const shouldShowGate = useLearningGateStore((s) => s.shouldShowGate);
+  const incrementWatched = useLearningGateStore((s) => s.incrementWatched);
+  const markSessionPassed = useLearningGateStore((s) => s.markSessionPassed);
 
   const { data: libraryVideos = [] } = useQuery({
     queryKey: ['libraryVideos'],
     queryFn: fetchLibraryVideos,
     staleTime: 30_000,
     retry: 1,
+  });
+
+  // Gate cleared state — compute eagerly so we skip gate when disabled
+  const [gateCleared, setGateCleared] = useState(() => {
+    const gateConfig = { learningGateEnabled, gateFrequency, videosPerGate };
+    return !useLearningGateStore.getState().shouldShowGate(gateConfig);
   });
 
   const playerRef = useRef<YouTubePlayerHandle>(null);
@@ -102,9 +122,9 @@ export default function PlayerScreen() {
     }
   }, [resolvedVideo?.id, channelVideos]);
 
-  // Initialize current video on mount
+  // Initialize current video on mount — waits for gate to be cleared
   useEffect(() => {
-    if (resolvedVideo) {
+    if (resolvedVideo && gateCleared) {
       setCurrentVideo(resolvedVideo);
       setIsPlaying(true);
       currentVideoIdRef.current = resolvedVideo.id;
@@ -122,7 +142,16 @@ export default function PlayerScreen() {
       setProgress(0, 0);
       if (upNextTimer.current) clearTimeout(upNextTimer.current);
     };
-  }, [resolvedVideo?.id]);
+  }, [resolvedVideo?.id, gateCleared]);
+
+  const handleGatePass = useCallback(() => {
+    if (gateFrequency === 'session') {
+      markSessionPassed();
+    } else {
+      incrementWatched();
+    }
+    setGateCleared(true);
+  }, [gateFrequency, markSessionPassed, incrementWatched]);
 
   const handleStateChange = useCallback(
     (state: PlayerState) => {
@@ -279,6 +308,14 @@ export default function PlayerScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Learning Gate — portaled to escape SafeAreaView transform context on web */}
+      {createPortal && typeof document !== 'undefined'
+        ? createPortal(
+            <LearningGate visible={!gateCleared} childAge={childAge} onPass={handleGatePass} />,
+            document.body
+          )
+        : <LearningGate visible={!gateCleared} childAge={childAge} onPass={handleGatePass} />}
+
       {/* Player + Overlay */}
       <View ref={playerContainerRef} style={[styles.playerWrapper, { height: playerHeight, alignSelf: 'center', width: playerWidth }]}>
         {displayVideo?.source === 'youtube' && displayVideo.youtubeVideoId ? (
