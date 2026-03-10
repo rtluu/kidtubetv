@@ -5,10 +5,9 @@ import { Video, Playlist } from '@src/types/video';
 import { GateFrequency } from '@src/types/learningGate';
 
 interface ParentState {
-  // Content management
-  userVideos: Video[];
-  addVideo: (video: Video) => void;
-  removeVideo: (videoId: string) => void;
+  // Playlist video metadata cache (YouTube-search videos added to playlists)
+  playlistVideoCache: Record<string, Video>;
+  setPlaylistVideo: (id: string, video: Video) => void;
 
   // Playlists
   playlists: Playlist[];
@@ -42,10 +41,6 @@ interface ParentState {
   setVideoStartTime: (videoId: string, seconds: number) => void;
   clearVideoStartTime: (videoId: string) => void;
 
-  // Custom sort orders for library groups (keyed by group id, e.g. network or channel id)
-  librarySortOrders: Record<string, string[]>;
-  setLibrarySortOrder: (groupKey: string, videoIds: string[]) => void;
-
   // Auto-play
   autoPlayEnabled: boolean;
   toggleAutoPlay: (enabled: boolean) => void;
@@ -64,17 +59,10 @@ interface ParentState {
 export const useParentStore = create<ParentState>()(
   persist(
     (set) => ({
-      userVideos: [],
-      addVideo: (video) =>
-        set((state) => ({ userVideos: [...state.userVideos, video] })),
-      removeVideo: (videoId) =>
+      playlistVideoCache: {},
+      setPlaylistVideo: (id, video) =>
         set((state) => ({
-          userVideos: state.userVideos.filter((v) => v.id !== videoId),
-          // Also remove from any playlists
-          playlists: state.playlists.map((p) => ({
-            ...p,
-            videoIds: p.videoIds.filter((id) => id !== videoId),
-          })),
+          playlistVideoCache: { ...state.playlistVideoCache, [id]: video },
         })),
 
       playlists: [],
@@ -160,12 +148,6 @@ export const useParentStore = create<ParentState>()(
           const { [videoId]: _, ...rest } = state.videoStartTimes;
           return { videoStartTimes: rest };
         }),
-
-      librarySortOrders: {},
-      setLibrarySortOrder: (groupKey, videoIds) =>
-        set((state) => ({
-          librarySortOrders: { ...state.librarySortOrders, [groupKey]: videoIds },
-        })),
 
       autoPlayEnabled: true,
       toggleAutoPlay: (enabled) => set({ autoPlayEnabled: enabled }),

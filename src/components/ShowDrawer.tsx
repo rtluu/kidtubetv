@@ -14,9 +14,9 @@ import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { colors, spacing, borderRadius, typography } from '@src/constants/theme';
-import { getChannels } from '@src/services/content';
+import { fetchSubscribedChannels } from '@src/services/channelSubscriptions';
 import { fetchAppConfig } from '@src/services/config';
-import { Channel } from '@src/types/video';
+import { SubscribedChannel } from '@src/types/video';
 
 interface ShowDrawerProps {
   visible: boolean;
@@ -31,8 +31,9 @@ export default function ShowDrawer({ visible, onClose }: ShowDrawerProps) {
   const backdropOpacity = useRef(new Animated.Value(0)).current;
 
   const { data: channels = [] } = useQuery({
-    queryKey: ['channels'],
-    queryFn: () => getChannels(),
+    queryKey: ['subscribedChannels'],
+    queryFn: fetchSubscribedChannels,
+    staleTime: 0,
   });
 
   const { data: appConfig } = useQuery({
@@ -56,7 +57,7 @@ export default function ShowDrawer({ visible, onClose }: ShowDrawerProps) {
       chs.sort((a, b) => a.title.localeCompare(b.title));
     }
     return chs;
-  })();
+  })() as SubscribedChannel[];
 
   useEffect(() => {
     if (visible) {
@@ -106,7 +107,7 @@ export default function ShowDrawer({ visible, onClose }: ShowDrawerProps) {
   }, []);
 
   const handleShowPress = useCallback(
-    (channel: Channel) => {
+    (channel: SubscribedChannel) => {
       onClose();
       router.push(`/browse/channel/${channel.id}`);
     },

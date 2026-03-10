@@ -76,3 +76,21 @@ export interface AppConfig {
   sectionTitleOverrides?: Record<string, string>;
   hiddenSections?: string[];
 }
+
+export interface SubscribedChannel {
+  id: string;               // same as youtubeChannelId
+  youtubeChannelId: string;
+  handle: string;           // "@CartoonNetwork"
+  title: string;
+  thumbnailUrl: string;
+  subscribedAt: number;
+  sortOrder: number;
+}
+
+export interface ChannelSearchResult {
+  channelId: string;
+  title: string;
+  thumbnailUrl: string;
+  handle: string;
+  subscriberCount: string;
+}

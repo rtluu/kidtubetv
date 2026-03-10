@@ -15,14 +15,12 @@ if (Platform.OS === 'web') {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useQuery } from '@tanstack/react-query';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { colors, spacing, typography } from '@src/constants/theme';
-import { getVideoById, getVideos, getChannels } from '@src/services/content';
-import { fetchLibraryVideos } from '@src/services/library';
 import { usePlayerStore } from '@src/stores/usePlayerStore';
 import { useHistoryStore } from '@src/stores/useHistoryStore';
 import { useParentStore } from '@src/stores/useParentStore';
+import { useChannelStore } from '@src/stores/useChannelStore';
 import { useLearningGateStore } from '@src/stores/useLearningGateStore';
 import LearningGate from '@src/components/LearningGate/LearningGate';
 import { formatDuration } from '@src/utils/format';
@@ -56,7 +54,7 @@ export default function PlayerScreen() {
 
   const addEntry = useHistoryStore((s) => s.addEntry);
   const videoStartTimes = useParentStore((s) => s.videoStartTimes);
-  const userVideos = useParentStore((s) => s.userVideos);
+  const playlistVideoCache = useParentStore((s) => s.playlistVideoCache);
   const learningGateEnabled = useParentStore((s) => s.learningGateEnabled);
   const childAge = useParentStore((s) => s.childAge);
   const gateFrequency = useParentStore((s) => s.gateFrequency);
@@ -65,12 +63,8 @@ export default function PlayerScreen() {
   const incrementWatched = useLearningGateStore((s) => s.incrementWatched);
   const markSessionPassed = useLearningGateStore((s) => s.markSessionPassed);
 
-  const { data: libraryVideos = [] } = useQuery({
-    queryKey: ['libraryVideos'],
-    queryFn: fetchLibraryVideos,
-    staleTime: 30_000,
-    retry: 1,
-  });
+  const getVideoById = useChannelStore((s) => s.getVideoById);
+  const channelVideosMap = useChannelStore((s) => s.channelVideos);
 
   // Gate cleared state — compute eagerly so we skip gate when disabled
   const [gateCleared, setGateCleared] = useState(() => {
@@ -89,38 +83,25 @@ export default function PlayerScreen() {
   const seekingRef = useRef(false);
   const currentVideoIdRef = useRef(videoId);
 
-  const { data: video } = useQuery({
-    queryKey: ['video', videoId],
-    queryFn: () => getVideoById(videoId!),
-    enabled: !!videoId,
-  });
+  // Resolve video from channel store or playlist cache
+  const resolvedVideo = videoId
+    ? (getVideoById(videoId) ?? playlistVideoCache[videoId])
+    : undefined;
 
-  const { data: channels = [] } = useQuery({
-    queryKey: ['channels'],
-    queryFn: () => getChannels(),
-  });
+  // Get channel videos for Up Next
+  const channelVideoList = channelVideosMap[resolvedVideo?.channelId ?? ''] ?? [];
 
-  // Resolve video from seed, user library, or backend library
-  const resolvedVideo = video
-    ?? userVideos.find((v) => v.id === videoId)
-    ?? libraryVideos.find((v) => v.id === videoId);
-
-  const { data: channelVideos = [] } = useQuery({
-    queryKey: ['videos', 'channel', resolvedVideo?.channelId],
-    queryFn: () => getVideos({ channelId: resolvedVideo!.channelId }),
-    enabled: !!resolvedVideo?.channelId,
-  });
-
-  const channel = channels.find((c) => c.id === resolvedVideo?.channelId);
+  // Channel title from subscribed channel (we don't have a separate channel type anymore)
+  const channelTitle = resolvedVideo?.channelId ?? '';
 
   // Build queue from channel videos after the current one
   useEffect(() => {
-    if (resolvedVideo && channelVideos.length > 0) {
-      const currentIndex = channelVideos.findIndex((v) => v.id === resolvedVideo.id);
-      const remaining = currentIndex >= 0 ? channelVideos.slice(currentIndex + 1) : [];
+    if (resolvedVideo && channelVideoList.length > 0) {
+      const currentIndex = channelVideoList.findIndex((v) => v.id === resolvedVideo.id);
+      const remaining = currentIndex >= 0 ? channelVideoList.slice(currentIndex + 1) : [];
       setQueue(remaining);
     }
-  }, [resolvedVideo?.id, channelVideos]);
+  }, [resolvedVideo?.id, channelVideoList.length]);
 
   // Initialize current video on mount — waits for gate to be cleared
   useEffect(() => {
@@ -165,14 +146,12 @@ export default function PlayerScreen() {
           upNextTimer.current = null;
         }
       } else if (state === 'paused') {
-        // Ignore transient paused states caused by seekTo with controls:0
         if (!seekingRef.current) {
           setIsPlaying(false);
         }
       } else if (state === 'ended') {
         seekingRef.current = false;
         setIsPlaying(false);
-        // Start auto-play countdown
         if (queue.length > 0) {
           setShowUpNext(true);
           upNextTimer.current = setTimeout(() => {
@@ -195,7 +174,6 @@ export default function PlayerScreen() {
       const nextVideo = currentQueue[0];
       playNext();
       setProgress(0, 0);
-      // Load the new video into the existing player
       if (nextVideo.youtubeVideoId) {
         playerRef.current?.loadVideo(nextVideo.youtubeVideoId);
       }
@@ -239,7 +217,6 @@ export default function PlayerScreen() {
   const handleSeek = useCallback((seconds: number) => {
     seekingRef.current = true;
     playerRef.current?.seekTo(seconds);
-    // Resume playback after seeking (seekTo with controls:0 fires transient pause)
     playerRef.current?.play();
     setIsPlaying(true);
   }, [setIsPlaying]);
@@ -260,7 +237,6 @@ export default function PlayerScreen() {
 
   const handleFullscreen = useCallback(() => {
     if (typeof document === 'undefined') return;
-    // RN Web View refs give us the underlying DOM element
     const container = playerContainerRef.current as unknown as HTMLElement | null;
     if (!container) return;
     if (document.fullscreenElement) {
@@ -270,7 +246,6 @@ export default function PlayerScreen() {
     }
   }, []);
 
-  // Track fullscreen changes to resize player
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const handler = () => setIsFullscreen(!!document.fullscreenElement);
@@ -278,12 +253,9 @@ export default function PlayerScreen() {
     return () => document.removeEventListener('fullscreenchange', handler);
   }, []);
 
-  // Pause playback when this screen loses focus (e.g. another modal pushed on top)
   useFocusEffect(
     useCallback(() => {
-      // Screen focused — no-op (play state managed elsewhere)
       return () => {
-        // Screen blurred — pause playback
         playerRef.current?.pause();
         setIsPlaying(false);
       };
@@ -294,7 +266,7 @@ export default function PlayerScreen() {
   const playerHeight = isFullscreen ? windowHeight : Math.round(playerWidth * (9 / 16));
   const displayVideo = currentVideo ?? resolvedVideo;
   const upNextVideo = queue.length > 0 ? queue[0] : null;
-  const upNext = channelVideos.filter((v) => v.id !== (displayVideo?.id ?? videoId));
+  const upNext = channelVideoList.filter((v) => v.id !== (displayVideo?.id ?? videoId));
 
   if (!resolvedVideo) {
     return (
@@ -308,7 +280,7 @@ export default function PlayerScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Learning Gate — portaled to escape SafeAreaView transform context on web */}
+      {/* Learning Gate */}
       {createPortal && typeof document !== 'undefined'
         ? createPortal(
             <LearningGate visible={!gateCleared} childAge={childAge} onPass={handleGatePass} />,
@@ -378,14 +350,13 @@ export default function PlayerScreen() {
         <View style={[styles.infoContainer, { maxWidth: MAX_PLAYER_WIDTH, alignSelf: 'center', width: '100%' }]}>
           <Text style={styles.videoTitle}>{displayVideo?.title}</Text>
           <View style={styles.metaRow}>
-            {channel ? (
-              <Text style={styles.channelName}>{channel.title}</Text>
+            {channelTitle ? (
+              <Text style={styles.channelName}>{channelTitle}</Text>
             ) : null}
             <Text style={styles.duration}>
               {formatDuration(displayVideo?.duration ?? 0)}
             </Text>
           </View>
-          <Text style={styles.videoDescription}>{displayVideo?.description}</Text>
         </View>
 
         {upNext.length > 0 ? (
@@ -498,12 +469,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.caption.fontFamily,
     fontSize: 12,
     color: colors.textSecondary,
-  },
-  videoDescription: {
-    fontFamily: typography.body.fontFamily,
-    fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 20,
   },
   upNextSection: {
     padding: spacing.md,

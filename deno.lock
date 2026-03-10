@@ -1,0 +1,52 @@
+{
+  "version": "5",
+  "remote": {
+    "https://edge.netlify.com/": "fd941d61d88673d5f28aab283fb86fcc50f08a3bc80ee5470498fcfa88c65cfb",
+    "https://edge.netlify.com/bootstrap/config.ts": "6a2ce0e544e15e8f8883a5c18da5948e37fd0f2619f68cb31f3af53c51817025",
+    "https://edge.netlify.com/bootstrap/context.ts": "e97240232121e2f369f6546ce961490f34d961ea1ea54be3ff09633e3f08373f",
+    "https://edge.netlify.com/bootstrap/cookie.ts": "8b0baae708989ca183c6f3b4ab3d029e6abcbc2e43f93edeb0ff447b3bbc3a05",
+    "https://edge.netlify.com/bootstrap/edge_function.ts": "b8253e86aa83c67341f5cfedeba5049d77fbf84dcab7eceff7566b7728ae9b39",
+    "https://edge.netlify.com/bootstrap/globals/types.ts": "eaa6148ded3121d8dee62dd91c86e7fe76601df0f3ca8d7962243a30f4c8935f"
+  },
+  "workspace": {
+    "packageJson": {
+      "dependencies": [
+        "npm:@expo-google-fonts/fredoka@~0.4.1",
+        "npm:@expo-google-fonts/press-start-2p@~0.4.1",
+        "npm:@expo/vector-icons@^15.0.3",
+        "npm:@netlify/blobs@^10.7.0",
+        "npm:@netlify/functions@^5.1.2",
+        "npm:@react-native-async-storage/async-storage@^2.1.2",
+        "npm:@react-navigation/native@^7.1.8",
+        "npm:@tanstack/react-query@^5.67.2",
+        "npm:@types/react@19.1",
+        "npm:expo-av@~15.1.7",
+        "npm:expo-constants@~18.0.13",
+        "npm:expo-font@~14.0.11",
+        "npm:expo-linking@~8.0.11",
+        "npm:expo-router@~6.0.23",
+        "npm:expo-splash-screen@~31.0.13",
+        "npm:expo-status-bar@~3.0.9",
+        "npm:expo-video@~2.2.2",
+        "npm:expo-web-browser@~15.0.10",
+        "npm:expo@~54.0.33",
+        "npm:lottie-react-native@^7.2.0",
+        "npm:netlify-cli@^24.0.1",
+        "npm:react-dom@19.1.0",
+        "npm:react-native-reanimated@~4.1.1",
+        "npm:react-native-safe-area-context@5.6",
+        "npm:react-native-screens@4.16",
+        "npm:react-native-web-webview@^1.0.2",
+        "npm:react-native-web@0.21",
+        "npm:react-native-webview@^13.13.5",
+        "npm:react-native-worklets@0.5.1",
+        "npm:react-native-youtube-iframe@^2.4.1",
+        "npm:react-native@0.81.5",
+        "npm:react-test-renderer@19.1.0",
+        "npm:react@19.1.0",
+        "npm:typescript@~5.9.2",
+        "npm:zustand@^5.0.3"
+      ]
+    }
+  }
+}

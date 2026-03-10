@@ -1,18 +1,21 @@
-import { StyleSheet, ScrollView, View, Text, ActivityIndicator } from 'react-native';
+import { StyleSheet, ScrollView, View, Text } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { colors, spacing, typography } from '@src/constants/theme';
-import { getChannels, getVideos, getNetworks } from '@src/services/content';
+import { getNetworks } from '@src/services/content';
+import { fetchSubscribedChannels } from '@src/services/channelSubscriptions';
+import { useChannelStore } from '@src/stores/useChannelStore';
 import ScreenHeader from '@src/components/ScreenHeader';
 import VideoCard from '@src/components/VideoCard';
 
 export default function ChannelDetailScreen() {
   const { channelId } = useLocalSearchParams<{ channelId: string }>();
 
-  const { data: channels = [] } = useQuery({
-    queryKey: ['channels'],
-    queryFn: () => getChannels(),
+  const { data: subscribedChannels = [] } = useQuery({
+    queryKey: ['subscribedChannels'],
+    queryFn: fetchSubscribedChannels,
+    staleTime: 0,
   });
 
   const { data: networks = [] } = useQuery({
@@ -20,14 +23,11 @@ export default function ChannelDetailScreen() {
     queryFn: getNetworks,
   });
 
-  const { data: videos = [], isLoading } = useQuery({
-    queryKey: ['videos', 'channel', channelId],
-    queryFn: () => getVideos({ channelId }),
-    enabled: !!channelId,
-  });
+  const channelVideosMap = useChannelStore((s) => s.channelVideos);
+  const videos = channelVideosMap[channelId ?? ''] ?? [];
 
-  const channel = channels.find((c) => c.id === channelId);
-  const network = networks.find((n) => n.id === channel?.networkId);
+  const channel = subscribedChannels.find((c) => c.id === channelId);
+  const network = networks.find((n) => n.id === 'youtube');
   const accentColor = network?.color ?? colors.primary;
 
   return (
@@ -39,16 +39,11 @@ export default function ChannelDetailScreen() {
       />
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         <View style={styles.content}>
-          {channel?.description ? (
-            <Text style={styles.description}>{channel.description}</Text>
-          ) : null}
           <Text style={styles.subtitle}>
             {videos.length} video{videos.length !== 1 ? 's' : ''}
           </Text>
-          {isLoading ? (
-            <ActivityIndicator color={accentColor} size="large" />
-          ) : videos.length === 0 ? (
-            <Text style={styles.empty}>No videos yet for this channel.</Text>
+          {videos.length === 0 ? (
+            <Text style={styles.empty}>No videos loaded yet for this channel.</Text>
           ) : (
             videos.map((video) => <VideoCard key={video.id} video={video} />)
           )}
@@ -73,12 +68,6 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     maxWidth: 700,
     width: '100%',
-  },
-  description: {
-    fontFamily: typography.body.fontFamily,
-    fontSize: typography.body.fontSize,
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
   },
   subtitle: {
     fontFamily: typography.caption.fontFamily,

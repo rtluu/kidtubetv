@@ -1,11 +1,10 @@
-import { StyleSheet, ScrollView, View, Text, ActivityIndicator } from 'react-native';
+import { StyleSheet, ScrollView, View, Text } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { colors, spacing, typography } from '@src/constants/theme';
-import { getNetworks, getChannels } from '@src/services/content';
+import { getNetworks } from '@src/services/content';
 import ScreenHeader from '@src/components/ScreenHeader';
-import ChannelCard from '@src/components/ChannelCard';
 
 export default function NetworkDetailScreen() {
   const { networkId } = useLocalSearchParams<{ networkId: string }>();
@@ -13,12 +12,6 @@ export default function NetworkDetailScreen() {
   const { data: networks = [] } = useQuery({
     queryKey: ['networks'],
     queryFn: getNetworks,
-  });
-
-  const { data: channels = [], isLoading } = useQuery({
-    queryKey: ['channels', 'network', networkId],
-    queryFn: () => getChannels({ networkId }),
-    enabled: !!networkId,
   });
 
   const network = networks.find((n) => n.id === networkId);
@@ -30,22 +23,9 @@ export default function NetworkDetailScreen() {
       <ScreenHeader title={networkName} showBack backgroundColor={networkColor} />
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         <View style={styles.content}>
-          <Text style={styles.subtitle}>
-            {channels.length} show{channels.length !== 1 ? 's' : ''}
+          <Text style={styles.empty}>
+            Browse channels from the Home screen.
           </Text>
-          {isLoading ? (
-            <ActivityIndicator color={networkColor} size="large" />
-          ) : channels.length === 0 ? (
-            <Text style={styles.empty}>No shows yet for this network.</Text>
-          ) : (
-            channels.map((channel) => (
-              <ChannelCard
-                key={channel.id}
-                channel={channel}
-                accentColor={networkColor}
-              />
-            ))
-          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -67,12 +47,6 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     maxWidth: 700,
     width: '100%',
-  },
-  subtitle: {
-    fontFamily: typography.body.fontFamily,
-    fontSize: typography.body.fontSize,
-    color: colors.textSecondary,
-    marginBottom: spacing.md,
   },
   empty: {
     fontFamily: typography.body.fontFamily,

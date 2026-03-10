@@ -10,21 +10,21 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueries } from '@tanstack/react-query';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { colors, spacing, typography, borderRadius } from '@src/constants/theme';
-import { getChannels, getVideos } from '@src/services/content';
-import { fetchLibraryVideos } from '@src/services/library';
+import { fetchSubscribedChannels, fetchChannelVideos } from '@src/services/channelSubscriptions';
 import { fetchAppConfig } from '@src/services/config';
-import { Video, Channel, Playlist, AppConfig } from '@src/types/video';
+import { Video, SubscribedChannel, Playlist, AppConfig } from '@src/types/video';
 import { useParentStore } from '@src/stores/useParentStore';
+import { useChannelStore } from '@src/stores/useChannelStore';
 import HomeVideoCard from '@src/components/HomeVideoCard';
 import ShowDrawer from '@src/components/ShowDrawer';
 
-type ViewMode = 'rows' | 'feed' | 'grid' | 'mine';
+type ViewMode = 'rows' | 'feed' | 'grid';
 
 interface ChannelSection {
-  channel: Channel;
+  channel: SubscribedChannel | { id: string; title: string; thumbnailUrl: string; networkId: string };
   videos: Video[];
 }
 
@@ -77,7 +77,7 @@ function FeedCardWrapper({
   onVisibilityChange,
 }: {
   video: Video;
-  channel?: Channel;
+  channel?: SubscribedChannel | { id: string; title: string; thumbnailUrl: string; networkId: string };
   cardWidth: number;
   isPreview: boolean;
   isExpanded: boolean;
@@ -94,9 +94,7 @@ function FeedCardWrapper({
   useEffect(() => {
     if (Platform.OS !== 'web' || !wrapperRef.current) return;
 
-    // Access the underlying DOM node from the RN Web View
     const node = (wrapperRef.current as any);
-    // RN Web View refs expose the DOM element directly
     const domNode: HTMLElement | null =
       node instanceof HTMLElement ? node :
       node?._nativeTag ?? node?.getHostNode?.() ?? null;
@@ -109,10 +107,7 @@ function FeedCardWrapper({
           onVisibilityChange(video.id, entry.intersectionRatio);
         }
       },
-      {
-        // Measure how central the card is — use multiple thresholds
-        threshold: [0, 0.25, 0.5, 0.75, 1.0],
-      }
+      { threshold: [0, 0.25, 0.5, 0.75, 1.0] }
     );
 
     observer.observe(domNode);
@@ -123,7 +118,7 @@ function FeedCardWrapper({
     <View ref={wrapperRef} collapsable={false}>
       <HomeVideoCard
         video={video}
-        channel={channel}
+        channel={channel as any}
         mode="feed"
         cardWidth={cardWidth}
         isPreview={isPreview}
@@ -146,33 +141,23 @@ export default function HomeScreen() {
   const [drawerVisible, setDrawerVisible] = useState(false);
   const { width: windowWidth } = useWindowDimensions();
 
-  // Track visibility ratios for feed cards
   const visibilityMap = useRef<Record<string, number>>({});
   const feedDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { data: channels = [] } = useQuery({
-    queryKey: ['channels'],
-    queryFn: () => getChannels(),
-  });
-
-  const { data: seedVideos = [], isLoading } = useQuery({
-    queryKey: ['videos'],
-    queryFn: () => getVideos(),
-  });
-
-  // User-added videos from Parent Admin
-  const userVideos = useParentStore((s) => s.userVideos);
   const playlists = useParentStore((s) => s.playlists);
+  const playlistVideoCache = useParentStore((s) => s.playlistVideoCache);
 
-  // Backend-persisted library videos
-  const { data: libraryVideos = [] } = useQuery({
-    queryKey: ['libraryVideos'],
-    queryFn: fetchLibraryVideos,
-    staleTime: 30_000,
+  const { channelVideos, allChannelVideos, setChannelVideos } = useChannelStore();
+
+  // Fetch subscribed channels
+  const { data: subscribedChannels = [], isLoading: channelsLoading } = useQuery({
+    queryKey: ['subscribedChannels'],
+    queryFn: fetchSubscribedChannels,
+    staleTime: 0,
     retry: 1,
   });
 
-  // Backend app config (channel order + video overrides)
+  // Backend app config
   const { data: appConfig } = useQuery({
     queryKey: ['appConfig'],
     queryFn: fetchAppConfig,
@@ -180,72 +165,45 @@ export default function HomeScreen() {
     retry: 1,
   });
 
-  // Combine seed + user + library videos, deduplicated by id, with overrides applied
-  const allVideos = useMemo(() => {
-    const seen = new Set<string>();
-    const merged: Video[] = [];
-    const overrides = appConfig?.videoOverrides ?? {};
-    for (const v of [...seedVideos, ...userVideos, ...libraryVideos]) {
-      if (!seen.has(v.id)) {
-        seen.add(v.id);
-        const override = overrides[v.id];
-        if (override) {
-          merged.push({ ...v, channelId: override.channelId });
-        } else {
-          merged.push(v);
-        }
-      }
-    }
-    return merged;
-  }, [seedVideos, userVideos, libraryVideos, appConfig]);
+  // Fetch videos for each subscribed channel
+  useQueries({
+    queries: subscribedChannels.map((ch) => ({
+      queryKey: ['channelVideos', ch.id],
+      queryFn: async () => {
+        const videos = await fetchChannelVideos(ch.id);
+        setChannelVideos(ch.id, videos);
+        return videos;
+      },
+      staleTime: 0,
+      retry: 1,
+    })),
+  });
 
+  // Build channelMap from subscribed channels
   const channelMap = useMemo(() => {
-    const map: Record<string, Channel> = {};
-    channels.forEach((c) => { map[c.id] = c; });
-    // Virtual channel for user-added videos (local + backend library)
-    const userLibraryCount = allVideos.filter((v) => v.channelId === 'user-library').length;
-    if (userLibraryCount > 0) {
-      map['user-library'] = {
-        id: 'user-library',
-        title: 'My Videos',
-        description: 'Videos added by parent',
-        thumbnailUrl: '',
-        networkId: 'user',
-        categoryIds: [],
-        ageRange: { min: 2, max: 12 },
-        videoCount: userLibraryCount,
-        sortOrder: -1,
-        isActive: true,
-        isFreebie: true,
-      };
-    }
+    const map: Record<string, SubscribedChannel> = {};
+    subscribedChannels.forEach((c) => { map[c.id] = c; });
     return map;
-  }, [channels, allVideos]);
+  }, [subscribedChannels]);
 
   // Group videos by channel for Up Next
   const videosByChannel = useMemo(() => {
     const map: Record<string, Video[]> = {};
-    allVideos.forEach((v) => {
+    allChannelVideos.forEach((v) => {
       if (!map[v.channelId]) map[v.channelId] = [];
       map[v.channelId].push(v);
     });
     return map;
-  }, [allVideos]);
+  }, [allChannelVideos]);
 
-  // Video lookup map for playlists
+  // Video lookup for playlists (channel videos + playlist cache)
   const videoMap = useMemo(() => {
-    const map: Record<string, Video> = {};
-    allVideos.forEach((v) => { map[v.id] = v; });
+    const map: Record<string, Video> = { ...playlistVideoCache };
+    allChannelVideos.forEach((v) => { map[v.id] = v; });
     return map;
-  }, [allVideos]);
+  }, [allChannelVideos, playlistVideoCache]);
 
   const channelSections: ChannelSection[] = useMemo(() => {
-    const grouped: Record<string, Video[]> = {};
-    allVideos.forEach((v) => {
-      if (!grouped[v.channelId]) grouped[v.channelId] = [];
-      grouped[v.channelId].push(v);
-    });
-
     const hiddenSet = new Set(appConfig?.hiddenSections ?? []);
     const titleOverrides = appConfig?.sectionTitleOverrides ?? {};
 
@@ -260,16 +218,9 @@ export default function HomeScreen() {
       playlistMap.set(pl.id, {
         channel: {
           id: pl.id,
-          title: pl.title,
-          description: `Playlist · ${plVideos.length} videos`,
+          title: titleOverrides[pl.id] ?? pl.title,
           thumbnailUrl: plVideos[0]?.thumbnailUrl ?? '',
           networkId: 'playlist',
-          categoryIds: [],
-          ageRange: { min: 2, max: 12 },
-          videoCount: plVideos.length,
-          sortOrder: pl.sortOrder,
-          isActive: true,
-          isFreebie: true,
         },
         videos: plVideos,
       });
@@ -277,41 +228,41 @@ export default function HomeScreen() {
 
     // Build channel sections
     const channelSectionMap = new Map<string, ChannelSection>();
-    const allChs: Channel[] = [...channels.filter((c) => grouped[c.id] && grouped[c.id].length > 0 && !hiddenSet.has(c.id))];
-    if (grouped['user-library'] && grouped['user-library'].length > 0 && channelMap['user-library'] && !hiddenSet.has('user-library')) {
-      allChs.push(channelMap['user-library']);
-    }
-    allChs.forEach((c) => {
-      const title = titleOverrides[c.id] ?? c.title;
-      channelSectionMap.set(c.id, { channel: { ...c, title }, videos: grouped[c.id] });
+    subscribedChannels.forEach((ch) => {
+      if (hiddenSet.has(ch.id)) return;
+      const videos = channelVideos[ch.id] ?? [];
+      if (videos.length === 0) return;
+      const title = titleOverrides[ch.id] ?? ch.title;
+      channelSectionMap.set(ch.id, {
+        channel: { ...ch, title },
+        videos,
+      });
     });
 
     // Unified ordering: sort all sections by appConfig.channelOrder
     const allSections: ChannelSection[] = [];
     const channelOrder = appConfig?.channelOrder ?? [];
     if (channelOrder.length > 0) {
-      // First: items in channelOrder, in order
       for (const id of channelOrder) {
         const plSection = playlistMap.get(id);
         if (plSection) { allSections.push(plSection); playlistMap.delete(id); continue; }
         const chSection = channelSectionMap.get(id);
         if (chSection) { allSections.push(chSection); channelSectionMap.delete(id); continue; }
       }
-      // Then: remaining playlists
       playlistMap.forEach((s) => allSections.push(s));
-      // Then: remaining channels
       channelSectionMap.forEach((s) => allSections.push(s));
     } else {
-      // Default: playlists first, then channels by sortOrder
       playlistMap.forEach((s) => allSections.push(s));
-      allChs.forEach((c) => {
-        const s = channelSectionMap.get(c.id);
+      subscribedChannels.forEach((ch) => {
+        const s = channelSectionMap.get(ch.id);
         if (s) allSections.push(s);
       });
     }
 
     return allSections;
-  }, [allVideos, channels, channelMap, playlists, videoMap, appConfig]);
+  }, [allChannelVideos, channelVideos, subscribedChannels, playlists, videoMap, appConfig]);
+
+  const isLoading = channelsLoading;
 
   // Responsive breakpoints
   const isTablet = windowWidth >= 600;
@@ -358,14 +309,11 @@ export default function HomeScreen() {
     return videosByChannel[video.channelId] ?? [];
   }, [videosByChannel]);
 
-  // Feed mode: pick the most-visible card as the preview
   const handleFeedVisibilityChange = useCallback((videoId: string, ratio: number) => {
     visibilityMap.current[videoId] = ratio;
 
-    // Debounce to avoid rapid switching
     if (feedDebounce.current) clearTimeout(feedDebounce.current);
     feedDebounce.current = setTimeout(() => {
-      // Find the video with the highest intersection ratio
       let bestId: string | null = null;
       let bestRatio = 0;
       for (const [id, r] of Object.entries(visibilityMap.current)) {
@@ -374,7 +322,6 @@ export default function HomeScreen() {
           bestId = id;
         }
       }
-      // Only autoplay if at least 50% visible
       if (bestId && bestRatio >= 0.5) {
         setPreviewVideoId((prev) => {
           if (prev === bestId) return prev;
@@ -382,7 +329,6 @@ export default function HomeScreen() {
         });
       } else {
         setPreviewVideoId((prev) => {
-          // Don't clear if something is expanded
           if (expandedVideoId) return prev;
           return null;
         });
@@ -390,7 +336,6 @@ export default function HomeScreen() {
     }, 150);
   }, [expandedVideoId]);
 
-  // Clear feed visibility tracking when leaving feed mode
   useEffect(() => {
     if (viewMode !== 'feed') {
       visibilityMap.current = {};
@@ -400,14 +345,14 @@ export default function HomeScreen() {
     }
   }, [viewMode, expandedVideoId]);
 
-  const renderVideoCard = useCallback((video: Video, ch: Channel | undefined, mode: ViewMode, width: number, instanceId?: string) => {
+  const renderVideoCard = useCallback((video: Video, ch: any, mode: ViewMode, width: number, instanceId?: string) => {
     const id = instanceId ?? video.id;
     return (
       <HomeVideoCard
         key={id}
         video={video}
         channel={ch}
-        mode={mode === 'mine' ? 'grid' : mode}
+        mode={mode}
         cardWidth={width}
         instanceId={id}
         isPreview={previewVideoId === id}
@@ -459,20 +404,20 @@ export default function HomeScreen() {
           active={viewMode === 'grid'}
           onPress={() => setViewMode('grid')}
         />
-        {allVideos.some((v) => v.channelId === 'user-library') && (
-          <ViewModeButton
-            icon="star"
-            label="My Videos"
-            active={viewMode === 'mine'}
-            onPress={() => setViewMode('mine')}
-          />
-        )}
       </View>
 
       {/* Content */}
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator color={colors.primary} size="large" />
+        </View>
+      ) : channelSections.length === 0 && subscribedChannels.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <FontAwesome name="television" size={48} color={colors.textSecondary} />
+          <Text style={styles.emptyTitle}>No Channels Yet</Text>
+          <Text style={styles.emptySubtext}>
+            Go to Settings → Library to subscribe to YouTube channels.
+          </Text>
         </View>
       ) : viewMode === 'rows' ? (
         <ScrollView style={styles.content}>
@@ -494,11 +439,11 @@ export default function HomeScreen() {
       ) : viewMode === 'feed' ? (
         <ScrollView style={styles.content} contentContainerStyle={styles.feedList}>
           <View style={styles.feedContainer}>
-            {seedVideos.map((video) => (
+            {allChannelVideos.map((video) => (
               <FeedCardWrapper
                 key={video.id}
                 video={video}
-                channel={channelMap[video.channelId]}
+                channel={channelMap[video.channelId] as any}
                 cardWidth={feedCardWidth}
                 isPreview={previewVideoId === video.id}
                 isExpanded={expandedVideoId === video.id}
@@ -513,20 +458,10 @@ export default function HomeScreen() {
             ))}
           </View>
         </ScrollView>
-      ) : viewMode === 'mine' ? (
-        <ScrollView style={styles.content} contentContainerStyle={styles.gridList}>
-          <View style={[styles.gridContainer, { gap: gridGap }]}>
-            {allVideos
-              .filter((v) => v.channelId === 'user-library')
-              .map((video) =>
-                renderVideoCard(video, channelMap[video.channelId], 'grid', gridCardWidth)
-              )}
-          </View>
-        </ScrollView>
       ) : (
         <ScrollView style={styles.content} contentContainerStyle={styles.gridList}>
           <View style={[styles.gridContainer, { gap: gridGap }]}>
-            {seedVideos.map((video) =>
+            {allChannelVideos.map((video) =>
               renderVideoCard(video, channelMap[video.channelId], 'grid', gridCardWidth)
             )}
           </View>
@@ -599,6 +534,25 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+    gap: spacing.md,
+  },
+  emptyTitle: {
+    fontFamily: typography.subheading.fontFamily,
+    fontSize: 18,
+    color: colors.textPrimary,
+    textAlign: 'center',
+  },
+  emptySubtext: {
+    fontFamily: typography.body.fontFamily,
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
   content: {
     flex: 1,

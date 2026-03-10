@@ -6,7 +6,8 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "dev": "netlify dev"
   },
   "dependencies": {
     "@expo-google-fonts/fredoka": "^0.4.1",
@@ -43,6 +44,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
+    "netlify-cli": "^24.0.1",
     "react-test-renderer": "19.1.0",
     "typescript": "~5.9.2"
   },
