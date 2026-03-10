@@ -28,17 +28,28 @@ function extractPartnerToken(playerCode: string): string {
 
 function getBestImage(images: unknown): string {
   if (!images) return '';
-  if (Array.isArray(images)) {
-    const preferred = (images as any[]).find(
-      (img) => img.profile === 'kids-mezzanine-16x9' || img.profile === 'mezzanine'
+  // PBS API returns images as an object keyed by profile name
+  // Note: PBS uses 'mezzannine' (double-n) in their key names
+  if (typeof images === 'object' && !Array.isArray(images)) {
+    const obj = images as Record<string, { url?: string }>;
+    return (
+      obj['kids-mezzannine-16x9']?.url ??
+      obj['kids-mezzanine-16x9']?.url ??
+      obj['kids-mezzannine-4x3']?.url ??
+      obj['kids-mezzannine-4x3']?.url ??
+      Object.values(obj)[0]?.url ??
+      ''
     );
-    const img = preferred ?? (images as any[])[0];
-    // Media Manager uses 'image' field, content services uses 'url'
-    return img?.image ?? img?.url ?? '';
   }
-  if (typeof images === 'object' && images !== null) {
-    const obj = images as Record<string, string>;
-    return obj['kids-mezzanine-16x9'] ?? obj['mezzanine'] ?? '';
+  // Fallback: array format
+  if (Array.isArray(images)) {
+    const arr = images as any[];
+    const preferred = arr.find(
+      (img) =>
+        img.profile?.includes('mezzanine') || img.profile?.includes('mezzannine')
+    );
+    const img = preferred ?? arr[0];
+    return img?.url ?? img?.image ?? '';
   }
   return '';
 }
@@ -67,7 +78,8 @@ export default async (request: Request, _context: Context) => {
     }
 
     const data = await res.json();
-    const results: any[] = data?.results ?? [];
+    // PBS producerplayer API uses 'items', not 'results'
+    const results: any[] = data?.items ?? data?.results ?? [];
 
     const videos: Video[] = [];
 
@@ -88,10 +100,8 @@ export default async (request: Request, _context: Context) => {
       const description: string =
         ep.description_short ?? ep.description_long ?? ep.description ?? '';
 
-      // Use tp_media_object_id if available (stable numeric ID), else fallback to id
-      const epId: string = String(
-        ep.tp_media_object_id ?? ep.id ?? `${showSlug}-${i}`
-      );
+      // Use guid (stable UUID) as the primary episode identifier
+      const epId: string = String(ep.guid ?? ep.id ?? `${showSlug}-${i}`);
 
       videos.push({
         id: `pbs-${epId}`,

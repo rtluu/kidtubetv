@@ -184,14 +184,19 @@ async function subscribePBSShow(slug: string): Promise<SubscribedChannel | null>
     );
     if (res.ok) {
       const data = await res.json();
-      const ep = data?.results?.[0];
+      // PBS producerplayer API uses 'items', not 'results'
+      const ep = (data?.items ?? data?.results)?.[0];
       if (ep) {
-        const images: any[] = Array.isArray(ep.images) ? ep.images : [];
-        const preferred = images.find(
-          (img) => img.profile === 'kids-mezzanine-16x9' || img.profile === 'mezzanine'
-        );
-        const img = preferred ?? images[0];
-        thumbnailUrl = img?.image ?? img?.url ?? '';
+        const images = ep.images;
+        if (images && typeof images === 'object' && !Array.isArray(images)) {
+          // Object format: { 'kids-mezzannine-16x9': { url: '...' }, ... }
+          thumbnailUrl =
+            (images as any)['kids-mezzannine-16x9']?.url ??
+            (images as any)['kids-mezzanine-16x9']?.url ??
+            (images as any)['kids-mezzannine-4x3']?.url ??
+            Object.values(images as Record<string, any>)[0]?.url ??
+            '';
+        }
       }
     }
   } catch {
