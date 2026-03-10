@@ -54,6 +54,15 @@ export async function unsubscribeFromChannel(channelId: string): Promise<void> {
 }
 
 export async function fetchChannelVideos(channelId: string): Promise<Video[]> {
+  if (channelId.startsWith('pbs-')) {
+    const showSlug = channelId.slice(4); // strip 'pbs-' prefix
+    const res = await fetch(
+      `${BASE_URL}/pbs-show-videos?showSlug=${encodeURIComponent(showSlug)}&channelId=${encodeURIComponent(channelId)}`
+    );
+    if (!res.ok) return [];
+    return res.json();
+  }
+
   const res = await fetch(
     `${BASE_URL}/channel-videos?channelId=${encodeURIComponent(channelId)}`
   );

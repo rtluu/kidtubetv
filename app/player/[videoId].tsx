@@ -26,6 +26,7 @@ import LearningGate from '@src/components/LearningGate/LearningGate';
 import { formatDuration } from '@src/utils/format';
 import VideoCard from '@src/components/VideoCard';
 import YouTubePlayer from '@src/components/YouTubePlayer';
+import PBSPlayer from '@src/components/PBSPlayer';
 import PremiumPlayerOverlay from '@src/components/PremiumPlayerOverlay';
 import type { YouTubePlayerHandle, PlayerState } from '@src/components/YouTubePlayer';
 
@@ -172,22 +173,28 @@ export default function PlayerScreen() {
     const { queue: currentQueue } = usePlayerStore.getState();
     if (currentQueue.length > 0) {
       const nextVideo = currentQueue[0];
-      playNext();
-      setProgress(0, 0);
-      if (nextVideo.youtubeVideoId) {
+
+      if (nextVideo.source === 'youtube' && nextVideo.youtubeVideoId) {
+        // YouTube: seamlessly load next video in the same iframe
+        playNext();
+        setProgress(0, 0);
         playerRef.current?.loadVideo(nextVideo.youtubeVideoId);
+        currentVideoIdRef.current = nextVideo.id;
+        setIsPlaying(true);
+        addEntry({
+          videoId: nextVideo.id,
+          channelId: nextVideo.channelId,
+          watchedAt: Date.now(),
+          watchedDuration: 0,
+          completed: false,
+        });
+      } else {
+        // PBS and other sources: navigate to new player screen
+        playNext();
+        router.replace(`/player/${nextVideo.id}`);
       }
-      currentVideoIdRef.current = nextVideo.id;
-      setIsPlaying(true);
-      addEntry({
-        videoId: nextVideo.id,
-        channelId: nextVideo.channelId,
-        watchedAt: Date.now(),
-        watchedDuration: 0,
-        completed: false,
-      });
     }
-  }, [playNext, setProgress, setIsPlaying, addEntry]);
+  }, [router, playNext, setProgress, setIsPlaying, addEntry]);
 
   const cancelUpNext = useCallback(() => {
     setShowUpNext(false);
@@ -319,6 +326,13 @@ export default function PlayerScreen() {
               onFullscreen={handleFullscreen}
             />
           </>
+        ) : displayVideo?.source === 'pbskids' && displayVideo.pbsPartnerToken ? (
+          <PBSPlayer
+            token={displayVideo.pbsPartnerToken}
+            width={playerWidth}
+            height={playerHeight}
+            autoplay={gateCleared}
+          />
         ) : (
           <View style={[styles.directPlaceholder, { height: playerHeight }]}>
             <FontAwesome name="play-circle" size={48} color={colors.crtBlue} />

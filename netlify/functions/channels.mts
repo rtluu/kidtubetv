@@ -9,6 +9,8 @@ interface SubscribedChannel {
   thumbnailUrl: string;
   subscribedAt: number;
   sortOrder: number;
+  source?: 'youtube' | 'pbskids';
+  pbsShowSlug?: string;
 }
 
 interface ChannelSearchResult {
@@ -31,8 +33,14 @@ const INNERTUBE_CONTEXT = {
   },
 };
 
-function classifyInput(input: string): { type: 'channelId' | 'handle' | 'slug' | 'search'; value: string } {
+function classifyInput(input: string): { type: 'channelId' | 'handle' | 'slug' | 'search' | 'pbskids'; value: string } {
   const trimmed = input.trim();
+
+  // PBS Kids URL: pbskids.org/videos/arthur or pbskids.org/arthur
+  const pbsMatch = trimmed.match(/pbskids\.org\/(?:videos\/)?([a-z][a-z0-9-]*)/i);
+  if (pbsMatch) {
+    return { type: 'pbskids', value: pbsMatch[1].toLowerCase() };
+  }
 
   // UCxxx style (channel ID)
   if (/^UC[\w-]{22}$/.test(trimmed)) {
@@ -159,6 +167,50 @@ async function searchChannels(query: string): Promise<ChannelSearchResult[]> {
   return results;
 }
 
+function formatShowSlug(slug: string): string {
+  return slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+async function subscribePBSShow(slug: string): Promise<SubscribedChannel | null> {
+  const title = formatShowSlug(slug);
+  const channelId = `pbs-${slug}`;
+
+  // Fetch first episode to get a thumbnail
+  let thumbnailUrl = '';
+  try {
+    const res = await fetch(
+      `https://producerplayer.services.pbskids.org/show-list/?shows=${encodeURIComponent(slug)}&available=public&type=episode&page_size=1`,
+      { headers: { Accept: 'application/json' } }
+    );
+    if (res.ok) {
+      const data = await res.json();
+      const ep = data?.results?.[0];
+      if (ep) {
+        const images: any[] = Array.isArray(ep.images) ? ep.images : [];
+        const preferred = images.find(
+          (img) => img.profile === 'kids-mezzanine-16x9' || img.profile === 'mezzanine'
+        );
+        const img = preferred ?? images[0];
+        thumbnailUrl = img?.image ?? img?.url ?? '';
+      }
+    }
+  } catch {
+    // thumbnail stays empty; non-fatal
+  }
+
+  return {
+    id: channelId,
+    youtubeChannelId: channelId,
+    handle: slug,
+    title,
+    thumbnailUrl,
+    subscribedAt: Date.now(),
+    sortOrder: 0,
+    source: 'pbskids',
+    pbsShowSlug: slug,
+  };
+}
+
 export default async (request: Request, _context: Context) => {
   const headers = { 'Content-Type': 'application/json' };
 
@@ -184,6 +236,32 @@ export default async (request: Request, _context: Context) => {
         // Search path: no blob access needed
         const results = await searchChannels(classified.value);
         return new Response(JSON.stringify({ results }), { status: 200, headers });
+      }
+
+      if (classified.type === 'pbskids') {
+        // PBS Kids show subscription
+        const channel = await subscribePBSShow(classified.value);
+        if (!channel) {
+          return new Response(
+            JSON.stringify({ error: 'Could not find PBS Kids show. Try pasting the show URL from pbskids.org.' }),
+            { status: 404, headers }
+          );
+        }
+
+        const store = getStore({ name: STORE_NAME, consistency: 'strong' });
+        const raw = await store.get(BLOB_KEY);
+        const channels: SubscribedChannel[] = raw ? JSON.parse(raw) : [];
+
+        const existing = channels.find((c) => c.id === channel.id);
+        if (existing) {
+          return new Response(JSON.stringify({ channel: existing }), { status: 200, headers });
+        }
+
+        channel.sortOrder = channels.length;
+        channels.push(channel);
+        await store.set(BLOB_KEY, JSON.stringify(channels));
+
+        return new Response(JSON.stringify({ channel }), { status: 201, headers });
       }
 
       // Resolve channel via InnerTube browse

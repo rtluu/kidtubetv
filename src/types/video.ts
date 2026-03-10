@@ -1,4 +1,4 @@
-export type VideoSource = 'youtube' | 'direct';
+export type VideoSource = 'youtube' | 'pbskids' | 'direct';
 
 export interface Video {
   id: string;
@@ -6,6 +6,7 @@ export interface Video {
   description: string;
   source: VideoSource;
   youtubeVideoId?: string;
+  pbsPartnerToken?: string;
   directUrl?: string;
   thumbnailUrl: string;
   duration: number;
@@ -78,13 +79,15 @@ export interface AppConfig {
 }
 
 export interface SubscribedChannel {
-  id: string;               // same as youtubeChannelId
-  youtubeChannelId: string;
-  handle: string;           // "@CartoonNetwork"
+  id: string;               // youtube: UCxxx, pbs: pbs-arthur
+  youtubeChannelId: string; // same as id
+  handle: string;           // youtube: "@CartoonNetwork", pbs: show slug
   title: string;
   thumbnailUrl: string;
   subscribedAt: number;
   sortOrder: number;
+  source?: 'youtube' | 'pbskids';
+  pbsShowSlug?: string;     // e.g. 'arthur'
 }
 
 export interface ChannelSearchResult {

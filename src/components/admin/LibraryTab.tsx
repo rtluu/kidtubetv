@@ -563,7 +563,11 @@ export default function LibraryTab() {
           >
             <FontAwesome name="trash" size={12} color={colors.vhsRed} />
             <Text style={styles.deleteBtnText}>
-              {isPlaylist ? 'Delete Playlist' : 'Unsubscribe Channel'}
+              {isPlaylist
+                ? 'Delete Playlist'
+                : editingSection.id.startsWith('pbs-')
+                ? 'Remove PBS Kids Show'
+                : 'Unsubscribe Channel'}
             </Text>
           </Pressable>
         </View>
@@ -596,7 +600,7 @@ export default function LibraryTab() {
             <Text style={styles.emptySubtext}>
               {isPlaylist
                 ? 'No videos yet. Tap "Add Videos" to get started.'
-                : 'Videos are loading from YouTube...'}
+                : 'Videos are loading...'}
             </Text>
           ) : isPlaylist ? (
             <DraggableList
@@ -961,14 +965,14 @@ export default function LibraryTab() {
           <Text style={[styles.sectionTitle, { fontSize: scaled.titleFont }]}>Add Channel</Text>
         </View>
         <Text style={[styles.sectionDescription, { fontSize: scaled.sectionDescFont }]}>
-          Paste a YouTube channel URL, @handle, or search by name.
+          Paste a YouTube channel URL, @handle, or channel name. Also supports PBS Kids show URLs (pbskids.org/videos/...).
         </Text>
         <View style={styles.addVideoRow}>
           <TextInput
             style={[styles.urlInput, { height: scaled.inputHeight }]}
             value={channelInput}
             onChangeText={(text) => { setChannelInput(text); setAddError(null); setChannelResults([]); }}
-            placeholder="youtube.com/@handle or channel name..."
+            placeholder="YouTube @handle, name, or pbskids.org/videos/..."
             placeholderTextColor={colors.textSecondary}
             autoCapitalize="none"
             autoCorrect={false}
@@ -1113,7 +1117,11 @@ export default function LibraryTab() {
                     {section.title}
                   </Text>
                   <Text style={[styles.sectionItemMeta, { fontSize: scaled.metaFont }]}>
-                    {section.type === 'playlist' ? 'Playlist' : 'Channel'} · {section.videoCount} video{section.videoCount !== 1 ? 's' : ''}
+                    {section.type === 'playlist'
+                      ? 'Playlist'
+                      : section.id.startsWith('pbs-')
+                      ? 'PBS Kids'
+                      : 'YouTube'}{' · '}{section.videoCount} video{section.videoCount !== 1 ? 's' : ''}
                     {section.hidden ? ' · Hidden' : ''}
                   </Text>
                 </View>
