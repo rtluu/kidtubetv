@@ -362,7 +362,7 @@ export default function HomeVideoCard({
                 <>
                   <YouTubePlayer
                     ref={expandedPlayerRef}
-                    videoId={expandedYoutubeId}
+                    videoId={expandedYoutubeId ?? ''}
                     width={expandedPlayerWidth}
                     height={expandedPlayerHeight}
                     play={expandedIsPlaying}
