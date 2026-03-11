@@ -45,10 +45,12 @@ const DirectVideoPlayer = forwardRef<DirectVideoPlayerHandle, DirectVideoPlayerP
   ({ url, width, height, play, mute, onStateChange, onProgress, onBufferProgress }, ref) => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const hlsRef = useRef<any>(null);
+    const playRef = useRef(play);
     const onStateChangeRef = useRef(onStateChange);
     const onProgressRef = useRef(onProgress);
     const onBufferProgressRef = useRef(onBufferProgress);
 
+    playRef.current = play;
     onStateChangeRef.current = onStateChange;
     onProgressRef.current = onProgress;
     onBufferProgressRef.current = onBufferProgress;
@@ -94,20 +96,20 @@ const DirectVideoPlayer = forwardRef<DirectVideoPlayerHandle, DirectVideoPlayerP
         if (video.canPlayType('application/vnd.apple.mpegurl')) {
           video.src = url;
           video.load();
-          if (play) video.play().catch(() => {});
+          if (playRef.current) video.play().catch(() => {});
         } else if (window.Hls?.isSupported()) {
           const hls = new window.Hls({ enableWorker: false });
           hlsRef.current = hls;
           hls.loadSource(url);
           hls.attachMedia(video);
           hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
-            if (!destroyed && play) video.play().catch(() => {});
+            if (!destroyed && playRef.current) video.play().catch(() => {});
           });
         } else {
           // Fallback: try src directly (may work for MP4)
           video.src = url;
           video.load();
-          if (play) video.play().catch(() => {});
+          if (playRef.current) video.play().catch(() => {});
         }
       };
 
