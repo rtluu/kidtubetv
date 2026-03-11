@@ -62,7 +62,11 @@ const DirectVideoPlayer = forwardRef<DirectVideoPlayerHandle, DirectVideoPlayerP
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           if (destroyed) return;
           if (playRef.current) {
-            video.play().catch(() => {});
+            video.play().catch(() => {
+              // Autoplay was blocked by the browser — surface this as a paused
+              // state so the overlay shows a play button instead of a pause button.
+              onStateChangeRef.current?.('paused');
+            });
           }
         });
         hls.on(Hls.Events.ERROR, (_evt, data) => {
@@ -81,7 +85,9 @@ const DirectVideoPlayer = forwardRef<DirectVideoPlayerHandle, DirectVideoPlayerP
         video.src = url;
         video.load();
         if (playRef.current) {
-          video.play().catch(() => {});
+          video.play().catch(() => {
+            onStateChangeRef.current?.('paused');
+          });
         }
       }
 
@@ -137,7 +143,9 @@ const DirectVideoPlayer = forwardRef<DirectVideoPlayerHandle, DirectVideoPlayerP
       const video = videoRef.current;
       if (!video) return;
       if (play) {
-        video.play().catch(() => {});
+        video.play().catch(() => {
+          onStateChangeRef.current?.('paused');
+        });
       } else {
         video.pause();
       }

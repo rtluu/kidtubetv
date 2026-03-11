@@ -14,6 +14,7 @@ import { Video, Channel } from '@src/types/video';
 import { formatDuration } from '@src/utils/format';
 import { colors, spacing, borderRadius, shadows, typography } from '@src/constants/theme';
 import YouTubePlayer, { YouTubePlayerHandle, PlayerState } from '@src/components/YouTubePlayer';
+import DirectVideoPlayer from '@src/components/DirectVideoPlayer';
 import PremiumPlayerOverlay from '@src/components/PremiumPlayerOverlay';
 import { useParentStore } from '@src/stores/useParentStore';
 import { useLearningGateStore } from '@src/stores/useLearningGateStore';
@@ -127,15 +128,22 @@ export default function HomeVideoCard({
   // Show inline preview player only when previewing AND not expanded
   const showInlinePlayer = isPreview && !isExpanded;
   const youtubeId = video.youtubeVideoId;
+  const pbsDirectUrl = video.source === 'pbskids' ? video.directUrl : undefined;
   const expandedYoutubeId = displayVideo.youtubeVideoId || youtubeId;
+  const isPBSVideo = displayVideo.source === 'pbskids' && !!displayVideo.directUrl;
+  // Any video that has a playable source can trigger a hover preview
+  const canHoverPreview = !!(youtubeId || pbsDirectUrl);
 
   // Premium overlay handlers
-  // expandedIsPlaying is an *intent* flag — only change it on explicit user actions
-  // or 'ended'. Don't set it false on transient 'paused'/'buffering' from seeks.
+  // expandedIsPlaying is an *intent* flag. For YouTube, we only change it on
+  // 'ended' because seeks fire transient 'paused' events. For PBS/DirectVideo,
+  // we also sync on 'playing'/'paused' so autoplay blocking is reflected correctly.
   const handleExpandedStateChange = useCallback((state: PlayerState) => {
     setExpandedPlayerState(state);
     if (state === 'ended') {
       setExpandedIsPlaying(false);
+    } else if (state === 'playing') {
+      setExpandedIsPlaying(true);
     }
   }, []);
 
@@ -188,13 +196,13 @@ export default function HomeVideoCard({
   }, []);
 
   const handleMouseEnter = useCallback(() => {
-    if (Platform.OS !== 'web' || !onPreviewStart || !youtubeId || isExpanded) return;
+    if (Platform.OS !== 'web' || !onPreviewStart || !canHoverPreview || isExpanded) return;
     // In feed mode, preview is driven by scroll position — skip hover
     if (mode === 'feed') return;
     hoverTimer.current = setTimeout(() => {
       onPreviewStart(cardInstanceId);
     }, HOVER_DELAY_MS);
-  }, [cardInstanceId, youtubeId, onPreviewStart, isExpanded, mode]);
+  }, [cardInstanceId, canHoverPreview, onPreviewStart, isExpanded, mode]);
 
   const handleMouseLeave = useCallback(() => {
     if (isExpanded) return;
@@ -266,7 +274,7 @@ export default function HomeVideoCard({
   );
 
   // ── Expanded overlay (portaled to document.body on web) ──────────
-  const expandedOverlay = isExpanded && expandedYoutubeId ? (
+  const expandedOverlay = isExpanded && (expandedYoutubeId || isPBSVideo) ? (
     <View style={styles.overlay}>
       {/* Dark backdrop — click to dismiss */}
       <Pressable style={styles.backdrop} onPress={handleCollapse} />
@@ -300,19 +308,33 @@ export default function HomeVideoCard({
                 height: expandedPlayerHeight,
               }]}
             >
-              <YouTubePlayer
-                ref={expandedPlayerRef}
-                videoId={expandedYoutubeId}
-                width={expandedPlayerWidth}
-                height={expandedPlayerHeight}
-                play={expandedIsPlaying}
-                mute={expandedMuted}
-                customControls
-                startTime={videoStartTimes[displayVideo.id]}
-                onStateChange={handleExpandedStateChange}
-                onProgress={handleExpandedProgress}
-                onBufferProgress={handleExpandedBufferProgress}
-              />
+              {isPBSVideo ? (
+                <DirectVideoPlayer
+                  ref={expandedPlayerRef}
+                  url={displayVideo.directUrl!}
+                  width={expandedPlayerWidth}
+                  height={expandedPlayerHeight}
+                  play={expandedIsPlaying}
+                  mute={expandedMuted}
+                  onStateChange={handleExpandedStateChange}
+                  onProgress={handleExpandedProgress}
+                  onBufferProgress={handleExpandedBufferProgress}
+                />
+              ) : (
+                <YouTubePlayer
+                  ref={expandedPlayerRef}
+                  videoId={expandedYoutubeId}
+                  width={expandedPlayerWidth}
+                  height={expandedPlayerHeight}
+                  play={expandedIsPlaying}
+                  mute={expandedMuted}
+                  customControls
+                  startTime={videoStartTimes[displayVideo.id]}
+                  onStateChange={handleExpandedStateChange}
+                  onProgress={handleExpandedProgress}
+                  onBufferProgress={handleExpandedBufferProgress}
+                />
+              )}
               <PremiumPlayerOverlay
                 playerState={expandedPlayerState}
                 currentTime={expandedCurrentTime}
@@ -399,6 +421,22 @@ export default function HomeVideoCard({
               />
               {/* Transparent click blocker — intercepts iframe clicks
                   so they trigger expansion instead of pausing */}
+              <Pressable
+                style={StyleSheet.absoluteFill}
+                onPress={handlePress}
+              />
+            </>
+          ) : showInlinePlayer && pbsDirectUrl ? (
+            <>
+              <DirectVideoPlayer
+                url={pbsDirectUrl}
+                width={cardWidth}
+                height={thumbnailHeight}
+                play
+                mute
+              />
+              {/* Transparent click blocker — intercepts video clicks
+                  so they trigger expansion instead of toggling playback */}
               <Pressable
                 style={StyleSheet.absoluteFill}
                 onPress={handlePress}

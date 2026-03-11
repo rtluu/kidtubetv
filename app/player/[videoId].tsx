@@ -64,7 +64,7 @@ export default function PlayerScreen() {
   const incrementWatched = useLearningGateStore((s) => s.incrementWatched);
   const markSessionPassed = useLearningGateStore((s) => s.markSessionPassed);
 
-  const getVideoById = useChannelStore((s) => s.getVideoById);
+  const allChannelVideos = useChannelStore((s) => s.allChannelVideos);
   const channelVideosMap = useChannelStore((s) => s.channelVideos);
 
   // Gate cleared state — compute eagerly so we skip gate when disabled
@@ -84,9 +84,11 @@ export default function PlayerScreen() {
   const seekingRef = useRef(false);
   const currentVideoIdRef = useRef(videoId);
 
-  // Resolve video from channel store or playlist cache
+  // Resolve video from channel store or playlist cache.
+  // Subscribe to allChannelVideos (not the stable getVideoById fn) so this
+  // component re-renders when the store is populated after navigation.
   const resolvedVideo = videoId
-    ? (getVideoById(videoId) ?? playlistVideoCache[videoId])
+    ? (allChannelVideos.find((v) => v.id === videoId) ?? playlistVideoCache[videoId])
     : undefined;
 
   // Get channel videos for Up Next
