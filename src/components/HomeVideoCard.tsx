@@ -346,7 +346,7 @@ export default function HomeVideoCard({
                 Platform.OS === 'web' ? (
                   // @ts-ignore — iframe is valid on web
                   <iframe
-                    src={`https://player.pbs.org/partnerplayer/${pbsPartnerToken}/?autoplay=1&end=0&endscreen=true`}
+                    src={`https://player.pbs.org/partnerplayer/${pbsPartnerToken}/?autoplay=true&topbar=false&end=0&endscreen=true`}
                     style={{ width: expandedPlayerWidth, height: expandedPlayerHeight, border: 'none', display: 'block' }}
                     allow="autoplay; fullscreen; encrypted-media"
                     allowFullScreen

@@ -4,6 +4,13 @@
 
 [functions]
   directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[functions."pbs-show-videos"]
+  timeout = 26
+
+[functions."channels"]
+  timeout = 26
 
 [dev]
   command = "npx expo start --web"

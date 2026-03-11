@@ -171,33 +171,49 @@ function formatShowSlug(slug: string): string {
   return slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-async function subscribePBSShow(slug: string): Promise<SubscribedChannel | null> {
+// Find the PBS API slug that actually returns episodes, trimming trailing
+// segments until we get a hit. e.g. "mister-rogers-neighborhood" → "mister-rogers"
+async function normalizePBSSlug(slug: string): Promise<{ slug: string; firstEp: any | null }> {
+  const segments = slug.split('-');
+  for (let len = segments.length; len >= 1; len--) {
+    const trySlug = segments.slice(0, len).join('-');
+    try {
+      const res = await fetch(
+        `https://producerplayer.services.pbskids.org/show-list/?shows=${encodeURIComponent(trySlug)}&available=public&type=episode&page_size=1`,
+        { headers: { Accept: 'application/json' } }
+      );
+      if (!res.ok) continue;
+      const data = await res.json();
+      const items: any[] = data?.items ?? data?.results ?? [];
+      if (items.length > 0) return { slug: trySlug, firstEp: items[0] };
+    } catch {
+      continue;
+    }
+  }
+  return { slug, firstEp: null };
+}
+
+async function subscribePBSShow(rawSlug: string): Promise<SubscribedChannel | null> {
+  // Normalize: find the PBS API slug that actually returns episodes
+  const { slug, firstEp } = await normalizePBSSlug(rawSlug);
+
+  // Require at least one episode to confirm the show exists
+  if (!firstEp) return null;
+
   const title = formatShowSlug(slug);
   const channelId = `pbs-${slug}`;
 
-  // Fetch first episode to get a thumbnail
+  // Extract thumbnail from the first episode
   let thumbnailUrl = '';
   try {
-    const res = await fetch(
-      `https://producerplayer.services.pbskids.org/show-list/?shows=${encodeURIComponent(slug)}&available=public&type=episode&page_size=1`,
-      { headers: { Accept: 'application/json' } }
-    );
-    if (res.ok) {
-      const data = await res.json();
-      // PBS producerplayer API uses 'items', not 'results'
-      const ep = (data?.items ?? data?.results)?.[0];
-      if (ep) {
-        const images = ep.images;
-        if (images && typeof images === 'object' && !Array.isArray(images)) {
-          // Object format: { 'kids-mezzannine-16x9': { url: '...' }, ... }
-          thumbnailUrl =
-            (images as any)['kids-mezzannine-16x9']?.url ??
-            (images as any)['kids-mezzanine-16x9']?.url ??
-            (images as any)['kids-mezzannine-4x3']?.url ??
-            Object.values(images as Record<string, any>)[0]?.url ??
-            '';
-        }
-      }
+    const images = firstEp.images;
+    if (images && typeof images === 'object' && !Array.isArray(images)) {
+      thumbnailUrl =
+        (images as any)['kids-mezzannine-16x9']?.url ??
+        (images as any)['kids-mezzanine-16x9']?.url ??
+        (images as any)['kids-mezzannine-4x3']?.url ??
+        Object.values(images as Record<string, any>)[0]?.url ??
+        '';
     }
   } catch {
     // thumbnail stays empty; non-fatal
