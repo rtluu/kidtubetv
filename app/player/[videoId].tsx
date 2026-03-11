@@ -355,6 +355,22 @@ export default function PlayerScreen() {
               onFullscreen={handleFullscreen}
             />
           </>
+        ) : displayVideo?.source === 'pbskids' && displayVideo.pbsPartnerToken ? (
+          /* PBS DRM video — use partner player iframe; PBS provides its own controls */
+          Platform.OS === 'web' ? (
+            // @ts-ignore — iframe is valid on web
+            <iframe
+              src={`https://player.pbs.org/partnerplayer/${displayVideo.pbsPartnerToken}/?autoplay=1&end=0&endscreen=true`}
+              style={{ width: playerWidth, height: playerHeight, border: 'none', display: 'block' }}
+              allow="autoplay; fullscreen; encrypted-media"
+              allowFullScreen
+            />
+          ) : (
+            <View style={[styles.directPlaceholder, { height: playerHeight }]}>
+              <FontAwesome name="play-circle" size={48} color={colors.crtBlue} />
+              <Text style={styles.directText}>This content is only available on web.</Text>
+            </View>
+          )
         ) : (
           <View style={[styles.directPlaceholder, { height: playerHeight }]}>
             <FontAwesome name="play-circle" size={48} color={colors.crtBlue} />

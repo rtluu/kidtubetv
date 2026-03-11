@@ -9,6 +9,7 @@ export interface DirectVideoPlayerProps {
   height: number;
   play?: boolean;
   mute?: boolean;
+  startTime?: number;
   onStateChange?: (state: PlayerState) => void;
   onProgress?: (currentTime: number, duration: number) => void;
   onBufferProgress?: (bufferedFraction: number) => void;

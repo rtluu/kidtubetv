@@ -4,16 +4,18 @@ import Hls from 'hls.js';
 import type { DirectVideoPlayerProps, DirectVideoPlayerHandle } from './DirectVideoPlayer';
 
 const DirectVideoPlayer = forwardRef<DirectVideoPlayerHandle, DirectVideoPlayerProps>(
-  ({ url, width, height, play, mute, onStateChange, onProgress, onBufferProgress }, ref) => {
+  ({ url, width, height, play, mute, startTime, onStateChange, onProgress, onBufferProgress }, ref) => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const hlsRef = useRef<Hls | null>(null);
     const playRef = useRef(play);
+    const startTimeRef = useRef(startTime);
     const onStateChangeRef = useRef(onStateChange);
     const onProgressRef = useRef(onProgress);
     const onBufferProgressRef = useRef(onBufferProgress);
 
     // Always keep refs current so async callbacks see latest values
     playRef.current = play;
+    startTimeRef.current = startTime;
     onStateChangeRef.current = onStateChange;
     onProgressRef.current = onProgress;
     onBufferProgressRef.current = onBufferProgress;
@@ -61,6 +63,9 @@ const DirectVideoPlayer = forwardRef<DirectVideoPlayerHandle, DirectVideoPlayerP
         hls.attachMedia(video);
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           if (destroyed) return;
+          if (startTimeRef.current && startTimeRef.current > 0) {
+            video.currentTime = startTimeRef.current;
+          }
           if (playRef.current) {
             video.play().catch(() => {
               // Autoplay was blocked by the browser — surface this as a paused
@@ -84,6 +89,14 @@ const DirectVideoPlayer = forwardRef<DirectVideoPlayerHandle, DirectVideoPlayerP
         // Safari — native HLS
         video.src = url;
         video.load();
+        if (startTimeRef.current && startTimeRef.current > 0) {
+          const seekOnReady = () => {
+            if (destroyed) return;
+            video.currentTime = startTimeRef.current!;
+            video.removeEventListener('canplay', seekOnReady);
+          };
+          video.addEventListener('canplay', seekOnReady);
+        }
         if (playRef.current) {
           video.play().catch(() => {
             onStateChangeRef.current?.('paused');

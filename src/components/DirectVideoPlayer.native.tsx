@@ -4,11 +4,12 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import type { DirectVideoPlayerProps, DirectVideoPlayerHandle } from './DirectVideoPlayer';
 
 const DirectVideoPlayerNative = forwardRef<DirectVideoPlayerHandle, DirectVideoPlayerProps>(
-  ({ url, width, height, play, mute, onStateChange, onProgress, onBufferProgress }, ref) => {
+  ({ url, width, height, play, mute, startTime, onStateChange, onProgress, onBufferProgress }, ref) => {
     const onStateChangeRef = useRef(onStateChange);
     const onProgressRef = useRef(onProgress);
     const onBufferProgressRef = useRef(onBufferProgress);
     const playRef = useRef(play);
+    const startTimeRef = useRef(startTime);
 
     onStateChangeRef.current = onStateChange;
     onProgressRef.current = onProgress;
@@ -59,8 +60,13 @@ const DirectVideoPlayerNative = forwardRef<DirectVideoPlayerHandle, DirectVideoP
     // Status changes (e.g. readyToPlay)
     useEffect(() => {
       const sub = player.addListener('statusChange', ({ status }: { status: string }) => {
-        if (status === 'readyToPlay' && playRef.current) {
-          player.play();
+        if (status === 'readyToPlay') {
+          if (startTimeRef.current && startTimeRef.current > 0) {
+            player.currentTime = startTimeRef.current;
+          }
+          if (playRef.current) {
+            player.play();
+          }
         }
       });
       return () => sub.remove();

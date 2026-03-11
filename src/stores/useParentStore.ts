@@ -36,10 +36,15 @@ interface ParentState {
   setBreakReminder: (minutes: number) => void;
   toggleBreakReminder: (enabled: boolean) => void;
 
-  // Video start times (seconds, keyed by video id)
+  // Video start times (seconds, keyed by video id) — per-video resume / start point
   videoStartTimes: Record<string, number>;
   setVideoStartTime: (videoId: string, seconds: number) => void;
   clearVideoStartTime: (videoId: string) => void;
+
+  // Channel preview start times (seconds, keyed by channel id) — skip show intros during hover preview
+  channelPreviewStartTimes: Record<string, number>;
+  setChannelPreviewStartTime: (channelId: string, seconds: number) => void;
+  clearChannelPreviewStartTime: (channelId: string) => void;
 
   // Auto-play
   autoPlayEnabled: boolean;
@@ -147,6 +152,17 @@ export const useParentStore = create<ParentState>()(
         set((state) => {
           const { [videoId]: _, ...rest } = state.videoStartTimes;
           return { videoStartTimes: rest };
+        }),
+
+      channelPreviewStartTimes: {},
+      setChannelPreviewStartTime: (channelId, seconds) =>
+        set((state) => ({
+          channelPreviewStartTimes: { ...state.channelPreviewStartTimes, [channelId]: seconds },
+        })),
+      clearChannelPreviewStartTime: (channelId) =>
+        set((state) => {
+          const { [channelId]: _, ...rest } = state.channelPreviewStartTimes;
+          return { channelPreviewStartTimes: rest };
         }),
 
       autoPlayEnabled: true,

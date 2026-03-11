@@ -72,6 +72,8 @@ export default function LibraryTab() {
   const [previewVideoId, setPreviewVideoId] = useState<string | null>(null);
   const [editingStartTimeId, setEditingStartTimeId] = useState<string | null>(null);
   const [startTimeInput, setStartTimeInput] = useState('');
+  const [editingChannelStartTime, setEditingChannelStartTime] = useState(false);
+  const [channelStartTimeInput, setChannelStartTimeInput] = useState('');
   const playerRef = useRef<YouTubePlayerHandle>(null);
 
   // ── Add Videos modal (playlists) ──
@@ -121,6 +123,9 @@ export default function LibraryTab() {
   const videoStartTimes = useParentStore((s) => s.videoStartTimes);
   const setVideoStartTime = useParentStore((s) => s.setVideoStartTime);
   const clearVideoStartTime = useParentStore((s) => s.clearVideoStartTime);
+  const channelPreviewStartTimes = useParentStore((s) => s.channelPreviewStartTimes);
+  const setChannelPreviewStartTime = useParentStore((s) => s.setChannelPreviewStartTime);
+  const clearChannelPreviewStartTime = useParentStore((s) => s.clearChannelPreviewStartTime);
 
   const channelVideosMap = useChannelStore((s) => s.channelVideos);
 
@@ -343,6 +348,18 @@ export default function LibraryTab() {
     setStartTimeInput('');
   }, [startTimeInput, parseTime, setVideoStartTime, clearVideoStartTime]);
 
+  const handleSaveChannelPreviewStartTime = useCallback(() => {
+    if (!editingSection || editingSection.type !== 'channel') return;
+    const seconds = parseTime(channelStartTimeInput);
+    if (seconds !== null && seconds > 0) {
+      setChannelPreviewStartTime(editingSection.id, seconds);
+    } else {
+      clearChannelPreviewStartTime(editingSection.id);
+    }
+    setEditingChannelStartTime(false);
+    setChannelStartTimeInput('');
+  }, [channelStartTimeInput, editingSection, parseTime, setChannelPreviewStartTime, clearChannelPreviewStartTime]);
+
   // ── Playlist handlers ──
   const handleCreatePlaylist = useCallback(() => {
     const title = newPlaylistTitle.trim();
@@ -444,6 +461,8 @@ export default function LibraryTab() {
     setEditingSection({ type: section.type, id: section.id });
     setPreviewVideoId(null);
     setEditingStartTimeId(null);
+    setEditingChannelStartTime(false);
+    setChannelStartTimeInput('');
     setView('editor');
   }, []);
 
@@ -452,6 +471,8 @@ export default function LibraryTab() {
     setEditingSection(null);
     setPreviewVideoId(null);
     setEditingStartTimeId(null);
+    setEditingChannelStartTime(false);
+    setChannelStartTimeInput('');
   }, []);
 
   // ── Modal: YouTube search and add to playlist ──
@@ -554,6 +575,56 @@ export default function LibraryTab() {
             />
           )}
 
+          {/* Preview Start Time — channels only */}
+          {!isPlaylist && (() => {
+            const currentPreviewStart = channelPreviewStartTimes[editingSection.id];
+            return (
+              <View style={styles.channelStartTimeSection}>
+                <Text style={[styles.fieldLabel, { fontSize: scaled.labelFont }]}>Preview Start Time</Text>
+                <Text style={[styles.channelStartTimeHint, { fontSize: scaled.smallFont }]}>
+                  Skip the show intro during hover previews. Leave empty to start from the beginning.
+                </Text>
+                {editingChannelStartTime ? (
+                  <View style={styles.startTimeRow}>
+                    <Text style={styles.startTimeLabel}>Start at:</Text>
+                    <TextInput
+                      style={[styles.startTimeInput, { color: colors.dark, backgroundColor: 'rgba(0,0,0,0.08)' }]}
+                      value={channelStartTimeInput}
+                      onChangeText={setChannelStartTimeInput}
+                      placeholder="0:00"
+                      placeholderTextColor={colors.textSecondary}
+                      keyboardType="numbers-and-punctuation"
+                      autoFocus
+                      onSubmitEditing={handleSaveChannelPreviewStartTime}
+                    />
+                    <Pressable style={styles.startTimeSaveBtn} onPress={handleSaveChannelPreviewStartTime}>
+                      <Text style={styles.startTimeSaveBtnText}>Save</Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.startTimeCancelBtn}
+                      onPress={() => { setEditingChannelStartTime(false); setChannelStartTimeInput(''); }}
+                    >
+                      <FontAwesome name="times" size={12} color={colors.textSecondary} />
+                    </Pressable>
+                  </View>
+                ) : (
+                  <Pressable
+                    style={styles.startTimeBtn}
+                    onPress={() => {
+                      setEditingChannelStartTime(true);
+                      setChannelStartTimeInput(currentPreviewStart ? formatTime(currentPreviewStart) : '');
+                    }}
+                  >
+                    <FontAwesome name="clock-o" size={12} color={colors.crtBlue} />
+                    <Text style={styles.startTimeBtnText}>
+                      {currentPreviewStart ? `Preview starts at ${formatTime(currentPreviewStart)}` : 'Set Preview Start Time'}
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            );
+          })()}
+
           <Pressable
             style={styles.deleteBtn}
             onPress={() => {
@@ -600,6 +671,8 @@ export default function LibraryTab() {
             <Text style={styles.emptySubtext}>
               {isPlaylist
                 ? 'No videos yet. Tap "Add Videos" to get started.'
+                : editingSection.id.startsWith('pbs-')
+                ? 'No playable episodes found. This show may not be in the PBS Kids catalog, or all episodes may be DRM-protected.'
                 : 'Videos are loading...'}
             </Text>
           ) : isPlaylist ? (
@@ -1417,6 +1490,16 @@ const styles = StyleSheet.create({
     fontFamily: typography.body.fontFamily,
     color: colors.textPrimary,
     backgroundColor: colors.background,
+  },
+  channelStartTimeSection: {
+    marginTop: spacing.sm,
+    marginBottom: 2,
+  },
+  channelStartTimeHint: {
+    fontFamily: typography.caption.fontFamily,
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   deleteBtn: {
     flexDirection: 'row',

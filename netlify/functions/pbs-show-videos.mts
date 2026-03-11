@@ -30,12 +30,16 @@ function extractPartnerToken(playerCode: string): string {
 function findHLSUrl(videos: unknown): string {
   if (!Array.isArray(videos) || videos.length === 0) return '';
   const arr = videos as any[];
+  // Only use non-DRM streams — DRM requires Widevine/FairPlay license servers
+  // that aren't available here. Skipping DRM entries means broken playback is
+  // caught at ingest time rather than silently failing in the player.
+  const nonDrm = arr.filter((v) => !v.drm_enabled);
   // Prefer 720p HLS, then any HLS, then 720p MP4, then any MP4
   return (
-    arr.find((v) => v.format === 'hls' && v.bitrate === '720p')?.url ??
-    arr.find((v) => v.format === 'hls')?.url ??
-    arr.find((v) => v.format === 'mp4' && v.bitrate === '720p')?.url ??
-    arr.find((v) => v.format === 'mp4')?.url ??
+    nonDrm.find((v) => v.format === 'hls' && v.bitrate === '720p')?.url ??
+    nonDrm.find((v) => v.format === 'hls')?.url ??
+    nonDrm.find((v) => v.format === 'mp4' && v.bitrate === '720p')?.url ??
+    nonDrm.find((v) => v.format === 'mp4')?.url ??
     ''
   );
 }
@@ -78,6 +82,26 @@ function getBestImage(images: unknown): string {
   return '';
 }
 
+// Try the given slug, then progressively shorter versions (e.g. "mister-rogers-neighborhood"
+// → "mister-rogers") until the API returns at least one episode.
+async function fetchEpisodesWithSlugFallback(showSlug: string): Promise<any[]> {
+  const segments = showSlug.split('-');
+  for (let len = segments.length; len >= 1; len--) {
+    const trySlug = segments.slice(0, len).join('-');
+    try {
+      const apiUrl = `${PRODUCER_API}/show-list/?shows=${encodeURIComponent(trySlug)}&available=public&type=episode&page_size=20`;
+      const res = await fetch(apiUrl, { headers: { Accept: 'application/json' } });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const items: any[] = data?.items ?? data?.results ?? [];
+      if (items.length > 0) return items;
+    } catch {
+      continue;
+    }
+  }
+  return [];
+}
+
 export default async (request: Request, _context: Context) => {
   const url = new URL(request.url);
   const showSlug = url.searchParams.get('showSlug');
@@ -92,18 +116,7 @@ export default async (request: Request, _context: Context) => {
   }
 
   try {
-    const apiUrl = `${PRODUCER_API}/show-list/?shows=${encodeURIComponent(showSlug)}&available=public&type=episode&page_size=20`;
-    const res = await fetch(apiUrl, {
-      headers: { Accept: 'application/json' },
-    });
-
-    if (!res.ok) {
-      return new Response(JSON.stringify([]), { status: 200, headers });
-    }
-
-    const data = await res.json();
-    // PBS producerplayer API uses 'items', not 'results'
-    const results: any[] = data?.items ?? data?.results ?? [];
+    const results = await fetchEpisodesWithSlugFallback(showSlug);
 
     // First pass: collect raw episode data (up to 20)
     const rawItems: { ep: any; ursUrl: string; token: string }[] = [];

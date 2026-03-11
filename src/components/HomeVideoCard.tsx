@@ -67,6 +67,7 @@ export default function HomeVideoCard({
   // when the same video appears in multiple sections (playlist + channel).
   const cardInstanceId = instanceId ?? video.id;
   const videoStartTimes = useParentStore((s) => s.videoStartTimes);
+  const channelPreviewStartTimes = useParentStore((s) => s.channelPreviewStartTimes);
   const learningGateEnabled = useParentStore((s) => s.learningGateEnabled);
   const childAge = useParentStore((s) => s.childAge);
   const gateFrequency = useParentStore((s) => s.gateFrequency);
@@ -130,7 +131,12 @@ export default function HomeVideoCard({
   const youtubeId = video.youtubeVideoId;
   const pbsDirectUrl = video.source === 'pbskids' ? video.directUrl : undefined;
   const expandedYoutubeId = displayVideo.youtubeVideoId || youtubeId;
-  const isPBSVideo = displayVideo.source === 'pbskids' && !!displayVideo.directUrl;
+  // PBS with direct HLS URL
+  const isPBSDirectVideo = displayVideo.source === 'pbskids' && !!displayVideo.directUrl;
+  // PBS with partner player token (DRM content — PBS handles decryption in their iframe)
+  const pbsPartnerToken = displayVideo.source === 'pbskids' ? (displayVideo.pbsPartnerToken ?? '') : '';
+  const isPBSPartnerVideo = displayVideo.source === 'pbskids' && !displayVideo.directUrl && !!pbsPartnerToken;
+  const isPBSVideo = isPBSDirectVideo || isPBSPartnerVideo;
   // Any video that has a playable source can trigger a hover preview
   const canHoverPreview = !!(youtubeId || pbsDirectUrl);
 
@@ -308,46 +314,80 @@ export default function HomeVideoCard({
                 height: expandedPlayerHeight,
               }]}
             >
-              {isPBSVideo ? (
-                <DirectVideoPlayer
-                  ref={expandedPlayerRef}
-                  url={displayVideo.directUrl!}
-                  width={expandedPlayerWidth}
-                  height={expandedPlayerHeight}
-                  play={expandedIsPlaying}
-                  mute={expandedMuted}
-                  onStateChange={handleExpandedStateChange}
-                  onProgress={handleExpandedProgress}
-                  onBufferProgress={handleExpandedBufferProgress}
-                />
+              {isPBSDirectVideo ? (
+                <>
+                  <DirectVideoPlayer
+                    ref={expandedPlayerRef}
+                    url={displayVideo.directUrl!}
+                    width={expandedPlayerWidth}
+                    height={expandedPlayerHeight}
+                    play={expandedIsPlaying}
+                    mute={expandedMuted}
+                    onStateChange={handleExpandedStateChange}
+                    onProgress={handleExpandedProgress}
+                    onBufferProgress={handleExpandedBufferProgress}
+                  />
+                  <PremiumPlayerOverlay
+                    playerState={expandedPlayerState}
+                    currentTime={expandedCurrentTime}
+                    duration={expandedDuration}
+                    bufferedFraction={expandedBuffered}
+                    volume={expandedVolume}
+                    isMuted={expandedMuted}
+                    onPlayPause={handleExpandedPlayPause}
+                    onSeek={handleExpandedSeek}
+                    onVolumeChange={handleExpandedVolumeChange}
+                    onMuteToggle={handleExpandedMuteToggle}
+                    onFullscreen={handleExpandedFullscreen}
+                  />
+                </>
+              ) : isPBSPartnerVideo ? (
+                /* PBS DRM video — use partner player iframe; PBS provides its own controls */
+                Platform.OS === 'web' ? (
+                  // @ts-ignore — iframe is valid on web
+                  <iframe
+                    src={`https://player.pbs.org/partnerplayer/${pbsPartnerToken}/?autoplay=1&end=0&endscreen=true`}
+                    style={{ width: expandedPlayerWidth, height: expandedPlayerHeight, border: 'none', display: 'block' }}
+                    allow="autoplay; fullscreen; encrypted-media"
+                    allowFullScreen
+                  />
+                ) : (
+                  <View style={{ width: expandedPlayerWidth, height: expandedPlayerHeight, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ color: '#fff', fontFamily: 'Fredoka_400Regular', fontSize: 14, textAlign: 'center', padding: 16 }}>
+                      This content is only available on web.
+                    </Text>
+                  </View>
+                )
               ) : (
-                <YouTubePlayer
-                  ref={expandedPlayerRef}
-                  videoId={expandedYoutubeId}
-                  width={expandedPlayerWidth}
-                  height={expandedPlayerHeight}
-                  play={expandedIsPlaying}
-                  mute={expandedMuted}
-                  customControls
-                  startTime={videoStartTimes[displayVideo.id]}
-                  onStateChange={handleExpandedStateChange}
-                  onProgress={handleExpandedProgress}
-                  onBufferProgress={handleExpandedBufferProgress}
-                />
+                <>
+                  <YouTubePlayer
+                    ref={expandedPlayerRef}
+                    videoId={expandedYoutubeId}
+                    width={expandedPlayerWidth}
+                    height={expandedPlayerHeight}
+                    play={expandedIsPlaying}
+                    mute={expandedMuted}
+                    customControls
+                    startTime={videoStartTimes[displayVideo.id]}
+                    onStateChange={handleExpandedStateChange}
+                    onProgress={handleExpandedProgress}
+                    onBufferProgress={handleExpandedBufferProgress}
+                  />
+                  <PremiumPlayerOverlay
+                    playerState={expandedPlayerState}
+                    currentTime={expandedCurrentTime}
+                    duration={expandedDuration}
+                    bufferedFraction={expandedBuffered}
+                    volume={expandedVolume}
+                    isMuted={expandedMuted}
+                    onPlayPause={handleExpandedPlayPause}
+                    onSeek={handleExpandedSeek}
+                    onVolumeChange={handleExpandedVolumeChange}
+                    onMuteToggle={handleExpandedMuteToggle}
+                    onFullscreen={handleExpandedFullscreen}
+                  />
+                </>
               )}
-              <PremiumPlayerOverlay
-                playerState={expandedPlayerState}
-                currentTime={expandedCurrentTime}
-                duration={expandedDuration}
-                bufferedFraction={expandedBuffered}
-                volume={expandedVolume}
-                isMuted={expandedMuted}
-                onPlayPause={handleExpandedPlayPause}
-                onSeek={handleExpandedSeek}
-                onVolumeChange={handleExpandedVolumeChange}
-                onMuteToggle={handleExpandedMuteToggle}
-                onFullscreen={handleExpandedFullscreen}
-              />
             </View>
 
             {/* Video info */}
@@ -417,7 +457,7 @@ export default function HomeVideoCard({
                 play
                 mute
                 cropped
-                startTime={videoStartTimes[video.id]}
+                startTime={channelPreviewStartTimes[video.channelId] ?? videoStartTimes[video.id]}
               />
               {/* Transparent click blocker — intercepts iframe clicks
                   so they trigger expansion instead of pausing */}
@@ -434,6 +474,7 @@ export default function HomeVideoCard({
                 height={thumbnailHeight}
                 play
                 mute
+                startTime={channelPreviewStartTimes[video.channelId]}
               />
               {/* Transparent click blocker — intercepts video clicks
                   so they trigger expansion instead of toggling playback */}
