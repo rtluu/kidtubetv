@@ -26,7 +26,7 @@ import LearningGate from '@src/components/LearningGate/LearningGate';
 import { formatDuration } from '@src/utils/format';
 import VideoCard from '@src/components/VideoCard';
 import YouTubePlayer from '@src/components/YouTubePlayer';
-import PBSPlayer from '@src/components/PBSPlayer';
+import DirectVideoPlayer from '@src/components/DirectVideoPlayer';
 import PremiumPlayerOverlay from '@src/components/PremiumPlayerOverlay';
 import type { YouTubePlayerHandle, PlayerState } from '@src/components/YouTubePlayer';
 
@@ -326,13 +326,33 @@ export default function PlayerScreen() {
               onFullscreen={handleFullscreen}
             />
           </>
-        ) : displayVideo?.source === 'pbskids' && displayVideo.pbsPartnerToken ? (
-          <PBSPlayer
-            token={displayVideo.pbsPartnerToken}
-            width={playerWidth}
-            height={playerHeight}
-            autoplay={gateCleared}
-          />
+        ) : displayVideo?.source === 'pbskids' && displayVideo.directUrl ? (
+          <>
+            <DirectVideoPlayer
+              ref={playerRef}
+              url={displayVideo.directUrl}
+              width={playerWidth}
+              height={playerHeight}
+              play={isPlaying && gateCleared}
+              mute={isMuted}
+              onStateChange={handleStateChange}
+              onProgress={handleProgress}
+              onBufferProgress={handleBufferProgress}
+            />
+            <PremiumPlayerOverlay
+              playerState={playerState}
+              currentTime={currentTime}
+              duration={duration}
+              bufferedFraction={bufferedFraction}
+              volume={volume}
+              isMuted={isMuted}
+              onPlayPause={handlePlayPause}
+              onSeek={handleSeek}
+              onVolumeChange={handleVolumeChange}
+              onMuteToggle={handleMuteToggle}
+              onFullscreen={handleFullscreen}
+            />
+          </>
         ) : (
           <View style={[styles.directPlaceholder, { height: playerHeight }]}>
             <FontAwesome name="play-circle" size={48} color={colors.crtBlue} />

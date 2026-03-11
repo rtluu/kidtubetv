@@ -6,6 +6,7 @@ interface Video {
   description: string;
   source: 'pbskids';
   pbsPartnerToken: string;
+  directUrl: string;
   thumbnailUrl: string;
   duration: number;
   channelId: string;
@@ -26,6 +27,29 @@ function extractPartnerToken(playerCode: string): string {
   return match?.[1] ?? '';
 }
 
+function findHLSUrl(videos: unknown): string {
+  if (!Array.isArray(videos) || videos.length === 0) return '';
+  const arr = videos as any[];
+  // Prefer 720p HLS, then any HLS, then 720p MP4, then any MP4
+  return (
+    arr.find((v) => v.format === 'hls' && v.bitrate === '720p')?.url ??
+    arr.find((v) => v.format === 'hls')?.url ??
+    arr.find((v) => v.format === 'mp4' && v.bitrate === '720p')?.url ??
+    arr.find((v) => v.format === 'mp4')?.url ??
+    ''
+  );
+}
+
+async function resolveURSUrl(ursUrl: string): Promise<string> {
+  if (!ursUrl) return '';
+  try {
+    const res = await fetch(ursUrl, { method: 'HEAD', redirect: 'follow' });
+    return res.url || ursUrl;
+  } catch {
+    return ursUrl;
+  }
+}
+
 function getBestImage(images: unknown): string {
   if (!images) return '';
   // PBS API returns images as an object keyed by profile name
@@ -36,7 +60,7 @@ function getBestImage(images: unknown): string {
       obj['kids-mezzannine-16x9']?.url ??
       obj['kids-mezzanine-16x9']?.url ??
       obj['kids-mezzannine-4x3']?.url ??
-      obj['kids-mezzannine-4x3']?.url ??
+      obj['kids-mezzanine-4x3']?.url ??
       Object.values(obj)[0]?.url ??
       ''
     );
@@ -81,15 +105,35 @@ export default async (request: Request, _context: Context) => {
     // PBS producerplayer API uses 'items', not 'results'
     const results: any[] = data?.items ?? data?.results ?? [];
 
-    const videos: Video[] = [];
-
+    // First pass: collect raw episode data (up to 20)
+    const rawItems: { ep: any; ursUrl: string; token: string }[] = [];
     for (let i = 0; i < results.length; i++) {
       const ep = results[i];
       if (!ep) continue;
 
-      const playerCode: string = ep.player_code ?? '';
-      const token = extractPartnerToken(playerCode);
-      if (!token) continue; // skip episodes with no embeddable player
+      const ursUrl = findHLSUrl(ep.videos);
+      const token = extractPartnerToken(ep.player_code ?? '');
+
+      // Skip episodes with no playback method
+      if (!ursUrl && !token) continue;
+
+      rawItems.push({ ep, ursUrl, token });
+      if (rawItems.length >= 20) break;
+    }
+
+    // Resolve all URS redirect URLs in parallel (server-side CORS bypass)
+    const resolvedUrls = await Promise.all(
+      rawItems.map((item) => resolveURSUrl(item.ursUrl))
+    );
+
+    // Second pass: build Video objects
+    const videos: Video[] = [];
+    for (let i = 0; i < rawItems.length; i++) {
+      const { ep, token } = rawItems[i];
+      const directUrl = resolvedUrls[i];
+
+      // Skip if we have neither a direct stream nor a fallback token
+      if (!directUrl && !token) continue;
 
       const title: string =
         ep.title ?? ep.title_sortable ?? ep.label ?? 'Untitled';
@@ -109,6 +153,7 @@ export default async (request: Request, _context: Context) => {
         description,
         source: 'pbskids',
         pbsPartnerToken: token,
+        directUrl,
         thumbnailUrl,
         duration,
         channelId,
@@ -116,12 +161,10 @@ export default async (request: Request, _context: Context) => {
         categoryIds: [],
         tags: [],
         ageRange: { min: 2, max: 10 },
-        sortOrder: i,
+        sortOrder: videos.length,
         isActive: true,
         isFreebie: true,
       });
-
-      if (videos.length >= 20) break;
     }
 
     return new Response(JSON.stringify(videos), { status: 200, headers });
