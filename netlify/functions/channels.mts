@@ -172,8 +172,8 @@ function formatShowSlug(slug: string): string {
 }
 
 // Find the PBS API slug that actually returns episodes.
-// Tries: exact slug, progressive prefix truncations, then single-segment-removal
-// variants. This handles cases like:
+// All candidates are probed in parallel to avoid sequential timeouts.
+// Handles:
 //   "mister-rogers-neighborhood" → "mister-rogers"   (prefix truncation)
 //   "clifford-the-big-red-dog"   → "clifford-big-red-dog" (drop "the")
 async function normalizePBSSlug(slug: string): Promise<{ slug: string; firstEp: any | null }> {
@@ -191,18 +191,24 @@ async function normalizePBSSlug(slug: string): Promise<{ slug: string; firstEp: 
     if (!candidates.includes(variant)) candidates.push(variant);
   }
 
-  for (const trySlug of candidates) {
-    try {
+  // Fire all requests in parallel — avoids sequential timeouts on the free Netlify plan
+  const results = await Promise.allSettled(
+    candidates.map(async (trySlug) => {
       const res = await fetch(
         `https://producerplayer.services.pbskids.org/show-list/?shows=${encodeURIComponent(trySlug)}&available=public&type=episode&page_size=1`,
         { headers: { Accept: 'application/json' } }
       );
-      if (!res.ok) continue;
+      if (!res.ok) return null;
       const data = await res.json();
       const items: any[] = data?.items ?? data?.results ?? [];
-      if (items.length > 0) return { slug: trySlug, firstEp: items[0] };
-    } catch {
-      continue;
+      return items.length > 0 ? { slug: trySlug, firstEp: items[0] } : null;
+    })
+  );
+
+  // Return the first success in candidate priority order (longest slug wins)
+  for (const result of results) {
+    if (result.status === 'fulfilled' && result.value !== null) {
+      return result.value;
     }
   }
   return { slug, firstEp: null };

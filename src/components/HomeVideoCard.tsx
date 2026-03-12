@@ -15,6 +15,7 @@ import { formatDuration } from '@src/utils/format';
 import { colors, spacing, borderRadius, shadows, typography } from '@src/constants/theme';
 import YouTubePlayer, { YouTubePlayerHandle, PlayerState } from '@src/components/YouTubePlayer';
 import DirectVideoPlayer from '@src/components/DirectVideoPlayer';
+import PBSPlayer from '@src/components/PBSPlayer';
 import PremiumPlayerOverlay from '@src/components/PremiumPlayerOverlay';
 import { useParentStore } from '@src/stores/useParentStore';
 import { useLearningGateStore } from '@src/stores/useLearningGateStore';
@@ -342,22 +343,13 @@ export default function HomeVideoCard({
                   />
                 </>
               ) : isPBSPartnerVideo ? (
-                /* PBS DRM video — use partner player iframe; PBS provides its own controls */
-                Platform.OS === 'web' ? (
-                  // @ts-ignore — iframe is valid on web
-                  <iframe
-                    src={`https://player.pbs.org/partnerplayer/${pbsPartnerToken}/?autoplay=true&topbar=false&end=0&endscreen=true`}
-                    style={{ width: expandedPlayerWidth, height: expandedPlayerHeight, border: 'none', display: 'block' }}
-                    allow="autoplay; fullscreen; encrypted-media"
-                    allowFullScreen
-                  />
-                ) : (
-                  <View style={{ width: expandedPlayerWidth, height: expandedPlayerHeight, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
-                    <Text style={{ color: '#fff', fontFamily: 'Fredoka_400Regular', fontSize: 14, textAlign: 'center', padding: 16 }}>
-                      This content is only available on web.
-                    </Text>
-                  </View>
-                )
+                /* PBS DRM video — use PBS partner player (web: iframe, native: WebView) */
+                <PBSPlayer
+                  token={pbsPartnerToken}
+                  width={expandedPlayerWidth}
+                  height={expandedPlayerHeight}
+                  autoplay
+                />
               ) : (
                 <>
                   <YouTubePlayer

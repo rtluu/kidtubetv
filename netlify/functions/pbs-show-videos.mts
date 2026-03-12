@@ -82,7 +82,9 @@ function getBestImage(images: unknown): string {
   return '';
 }
 
-// Try the given slug, then fallback variants until the API returns episodes.
+// Try all slug variants in parallel and return the first (highest-priority) one
+// that has at least one playable item (non-DRM stream or partner token).
+// Parallel probing avoids sequential timeouts on Netlify's free plan (10s limit).
 // Handles: "mister-rogers-neighborhood" → "mister-rogers" (prefix truncation)
 //          "clifford-the-big-red-dog"   → "clifford-big-red-dog" (drop "the")
 async function fetchEpisodesWithSlugFallback(showSlug: string): Promise<any[]> {
@@ -99,16 +101,32 @@ async function fetchEpisodesWithSlugFallback(showSlug: string): Promise<any[]> {
     if (!candidates.includes(variant)) candidates.push(variant);
   }
 
-  for (const trySlug of candidates) {
-    try {
+  // Fire all requests in parallel — much faster than sequential probing
+  const results = await Promise.allSettled(
+    candidates.map(async (trySlug) => {
       const apiUrl = `${PRODUCER_API}/show-list/?shows=${encodeURIComponent(trySlug)}&available=public&type=episode&page_size=20`;
       const res = await fetch(apiUrl, { headers: { Accept: 'application/json' } });
-      if (!res.ok) continue;
+      if (!res.ok) return null;
       const data = await res.json();
       const items: any[] = data?.items ?? data?.results ?? [];
-      if (items.length > 0) return items;
-    } catch {
-      continue;
+      // Only accept this slug if at least one item is actually playable.
+      // DRM-only items with no partner token are dead ends — skip them so we
+      // keep searching for a slug that has real content.
+      const hasPlayable = items.some((ep) => {
+        const videos = ep.videos ?? [];
+        const hasNonDrm =
+          Array.isArray(videos) && videos.some((v: any) => !v.drm_enabled);
+        const hasToken = !!extractPartnerToken(ep.player_code ?? '');
+        return hasNonDrm || hasToken;
+      });
+      return hasPlayable ? items : null;
+    })
+  );
+
+  // Return the first success in candidate priority order (longest slug wins)
+  for (const result of results) {
+    if (result.status === 'fulfilled' && result.value !== null) {
+      return result.value;
     }
   }
   return [];

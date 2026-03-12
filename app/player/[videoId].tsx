@@ -27,6 +27,7 @@ import { formatDuration } from '@src/utils/format';
 import VideoCard from '@src/components/VideoCard';
 import YouTubePlayer from '@src/components/YouTubePlayer';
 import DirectVideoPlayer from '@src/components/DirectVideoPlayer';
+import PBSPlayer from '@src/components/PBSPlayer';
 import PremiumPlayerOverlay from '@src/components/PremiumPlayerOverlay';
 import type { YouTubePlayerHandle, PlayerState } from '@src/components/YouTubePlayer';
 
@@ -356,21 +357,13 @@ export default function PlayerScreen() {
             />
           </>
         ) : displayVideo?.source === 'pbskids' && displayVideo.pbsPartnerToken ? (
-          /* PBS DRM video — use partner player iframe; PBS provides its own controls */
-          Platform.OS === 'web' ? (
-            // @ts-ignore — iframe is valid on web
-            <iframe
-              src={`https://player.pbs.org/partnerplayer/${displayVideo.pbsPartnerToken}/?autoplay=true&topbar=false&end=0&endscreen=true`}
-              style={{ width: playerWidth, height: playerHeight, border: 'none', display: 'block' }}
-              allow="autoplay; fullscreen; encrypted-media"
-              allowFullScreen
-            />
-          ) : (
-            <View style={[styles.directPlaceholder, { height: playerHeight }]}>
-              <FontAwesome name="play-circle" size={48} color={colors.crtBlue} />
-              <Text style={styles.directText}>This content is only available on web.</Text>
-            </View>
-          )
+          /* PBS DRM video — use PBS partner player (web: iframe, native: WebView) */
+          <PBSPlayer
+            token={displayVideo.pbsPartnerToken}
+            width={playerWidth}
+            height={playerHeight}
+            autoplay
+          />
         ) : (
           <View style={[styles.directPlaceholder, { height: playerHeight }]}>
             <FontAwesome name="play-circle" size={48} color={colors.crtBlue} />
