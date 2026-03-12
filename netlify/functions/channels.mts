@@ -139,19 +139,21 @@ async function browsePlaylist(playlistId: string): Promise<SubscribedChannel | n
   if (!res.ok) return null;
   const data = await res.json();
 
-  const header = data?.header?.playlistHeaderRenderer;
-  if (!header) return null;
-
+  // Title — try multiple paths (YouTube changes header structure periodically)
+  const sidebar = data?.sidebar?.playlistSidebarRenderer?.items?.[0]?.playlistSidebarPrimaryInfoRenderer;
   const title: string =
-    header.title?.simpleText ??
-    header.title?.runs?.[0]?.text ??
-    'Playlist';
+    data?.microformat?.microformatDataRenderer?.title ??
+    data?.header?.pageHeaderRenderer?.pageTitle ??
+    sidebar?.title?.runs?.[0]?.text ??
+    data?.header?.playlistHeaderRenderer?.title?.simpleText ??
+    '';
 
-  // Thumbnail: try header first, then fall back to first video thumbnail
+  // Thumbnail — sidebar has the best one, fall back to first video
   let thumbnailUrl = '';
-  const headerThumbs: any[] = header.thumbnail?.thumbnails ?? [];
-  if (headerThumbs.length > 0) {
-    thumbnailUrl = headerThumbs[headerThumbs.length - 1].url ?? '';
+  const sidebarThumbs: any[] =
+    sidebar?.thumbnailRenderer?.playlistVideoThumbnailRenderer?.thumbnail?.thumbnails ?? [];
+  if (sidebarThumbs.length > 0) {
+    thumbnailUrl = sidebarThumbs[sidebarThumbs.length - 1].url ?? '';
   }
   if (!thumbnailUrl) {
     const tabs: any[] = data?.contents?.twoColumnBrowseResultsRenderer?.tabs ?? [];
@@ -163,13 +165,20 @@ async function browsePlaylist(playlistId: string): Promise<SubscribedChannel | n
         if (plItems.length > 0) {
           const firstVr = plItems[0]?.playlistVideoRenderer;
           if (firstVr?.videoId) {
-            thumbnailUrl = `https://img.youtube.com/vi/${firstVr.videoId}/mqdefault.jpg`;
+            const thumbs: any[] = firstVr.thumbnail?.thumbnails ?? [];
+            thumbnailUrl =
+              thumbs.length > 0
+                ? thumbs[thumbs.length - 1].url
+                : `https://img.youtube.com/vi/${firstVr.videoId}/mqdefault.jpg`;
           }
           break outer;
         }
       }
     }
   }
+
+  // Require at least a title to confirm the playlist exists
+  if (!title) return null;
 
   const id = `ytpl-${playlistId}`;
   return {

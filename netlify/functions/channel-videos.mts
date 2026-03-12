@@ -154,8 +154,13 @@ async function fetchPlaylistVideos(playlistId: string, channelId: string): Promi
         ? thumbnails[thumbnails.length - 1].url
         : `https://img.youtube.com/vi/${vr.videoId}/mqdefault.jpg`;
 
-    const durationText: string = vr.lengthText?.simpleText ?? '';
-    const duration = parseDuration(durationText);
+    // lengthSeconds is directly available on playlistVideoRenderer (no parsing needed)
+    const duration: number =
+      typeof vr.lengthSeconds === 'number'
+        ? vr.lengthSeconds
+        : typeof vr.lengthSeconds === 'string'
+          ? parseInt(vr.lengthSeconds, 10) || parseDuration(vr.lengthText?.simpleText ?? '')
+          : parseDuration(vr.lengthText?.simpleText ?? '');
 
     videos.push({
       id: `yt-${vr.videoId}`,
