@@ -9,7 +9,6 @@ import {
   ScrollView,
   useWindowDimensions,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Video, Channel } from '@src/types/video';
 import { formatDuration } from '@src/utils/format';
@@ -64,15 +63,10 @@ export default function HomeVideoCard({
   upNextVideos = [],
   onPlayVideo,
 }: HomeVideoCardProps) {
-  const router = useRouter();
   // Unique identifier for this card instance — defaults to video.id but can be
   // overridden (e.g. "sectionId:videoId") to prevent duplicate-card expansion
   // when the same video appears in multiple sections (playlist + channel).
   const cardInstanceId = instanceId ?? video.id;
-  // PBS partner-player videos (DRM — no direct HLS URL) are not embeddable in the
-  // inline overlay reliably, so we send them to the full-screen route player.
-  const isPBSPartnerOnly =
-    video.source === 'pbskids' && !video.directUrl && !!video.pbsPartnerToken;
   const videoStartTimes = useParentStore((s) => s.videoStartTimes);
   const channelPreviewStartTimes = useParentStore((s) => s.channelPreviewStartTimes);
   const learningGateEnabled = useParentStore((s) => s.learningGateEnabled);
@@ -235,16 +229,11 @@ export default function HomeVideoCard({
       setPendingExpand(true);
       return;
     }
-    // PBS partner-player (DRM) videos go to the full-screen route player
-    if (isPBSPartnerOnly) {
-      router.push(`/player/${video.id}`);
-      return;
-    }
     if (!isPreview && onPreviewStart) {
       onPreviewStart(cardInstanceId);
     }
     onExpand?.(cardInstanceId);
-  }, [isExpanded, isPreview, onPreviewStart, onExpand, cardInstanceId, learningGateEnabled, gateFrequency, videosPerGate, shouldShowGate, isPBSPartnerOnly, router, video.id]);
+  }, [isExpanded, isPreview, onPreviewStart, onExpand, cardInstanceId, learningGateEnabled, gateFrequency, videosPerGate, shouldShowGate]);
 
   const handleGatePass = useCallback(() => {
     setShowGate(false);
@@ -255,16 +244,12 @@ export default function HomeVideoCard({
     }
     if (pendingExpand) {
       setPendingExpand(false);
-      if (isPBSPartnerOnly) {
-        router.push(`/player/${video.id}`);
-        return;
-      }
       if (!isPreview && onPreviewStart) {
         onPreviewStart(cardInstanceId);
       }
       onExpand?.(cardInstanceId);
     }
-  }, [pendingExpand, isPreview, onPreviewStart, onExpand, cardInstanceId, gateFrequency, incrementWatched, markSessionPassed, isPBSPartnerOnly, router, video.id]);
+  }, [pendingExpand, isPreview, onPreviewStart, onExpand, cardInstanceId, gateFrequency, incrementWatched, markSessionPassed]);
 
   const handleCollapse = useCallback(() => {
     onCollapse?.();
@@ -274,6 +259,10 @@ export default function HomeVideoCard({
     if (nextVideo.youtubeVideoId) {
       const nextStart = videoStartTimes[nextVideo.id];
       expandedPlayerRef.current?.loadVideo(nextVideo.youtubeVideoId, nextStart);
+      setDisplayVideo(nextVideo);
+      onPlayVideo?.(nextVideo.id);
+    } else if (nextVideo.source === 'pbskids') {
+      // PBS video — update displayVideo so PBSPlayer re-renders with new content
       setDisplayVideo(nextVideo);
       onPlayVideo?.(nextVideo.id);
     }
