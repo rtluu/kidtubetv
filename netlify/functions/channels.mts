@@ -171,12 +171,27 @@ function formatShowSlug(slug: string): string {
   return slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-// Find the PBS API slug that actually returns episodes, trimming trailing
-// segments until we get a hit. e.g. "mister-rogers-neighborhood" → "mister-rogers"
+// Find the PBS API slug that actually returns episodes.
+// Tries: exact slug, progressive prefix truncations, then single-segment-removal
+// variants. This handles cases like:
+//   "mister-rogers-neighborhood" → "mister-rogers"   (prefix truncation)
+//   "clifford-the-big-red-dog"   → "clifford-big-red-dog" (drop "the")
 async function normalizePBSSlug(slug: string): Promise<{ slug: string; firstEp: any | null }> {
   const segments = slug.split('-');
+
+  // Build candidate list (deduped, preserving priority order):
+  // 1. All prefix truncations from longest to shortest
+  const candidates: string[] = [];
   for (let len = segments.length; len >= 1; len--) {
-    const trySlug = segments.slice(0, len).join('-');
+    candidates.push(segments.slice(0, len).join('-'));
+  }
+  // 2. Single-segment-removal variants (skip first and last — already covered by prefixes)
+  for (let i = 1; i < segments.length - 1; i++) {
+    const variant = [...segments.slice(0, i), ...segments.slice(i + 1)].join('-');
+    if (!candidates.includes(variant)) candidates.push(variant);
+  }
+
+  for (const trySlug of candidates) {
     try {
       const res = await fetch(
         `https://producerplayer.services.pbskids.org/show-list/?shows=${encodeURIComponent(trySlug)}&available=public&type=episode&page_size=1`,

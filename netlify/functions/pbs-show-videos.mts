@@ -82,12 +82,24 @@ function getBestImage(images: unknown): string {
   return '';
 }
 
-// Try the given slug, then progressively shorter versions (e.g. "mister-rogers-neighborhood"
-// → "mister-rogers") until the API returns at least one episode.
+// Try the given slug, then fallback variants until the API returns episodes.
+// Handles: "mister-rogers-neighborhood" → "mister-rogers" (prefix truncation)
+//          "clifford-the-big-red-dog"   → "clifford-big-red-dog" (drop "the")
 async function fetchEpisodesWithSlugFallback(showSlug: string): Promise<any[]> {
   const segments = showSlug.split('-');
+
+  // 1. Prefix truncations (longest to shortest)
+  const candidates: string[] = [];
   for (let len = segments.length; len >= 1; len--) {
-    const trySlug = segments.slice(0, len).join('-');
+    candidates.push(segments.slice(0, len).join('-'));
+  }
+  // 2. Single-segment-removal variants
+  for (let i = 1; i < segments.length - 1; i++) {
+    const variant = [...segments.slice(0, i), ...segments.slice(i + 1)].join('-');
+    if (!candidates.includes(variant)) candidates.push(variant);
+  }
+
+  for (const trySlug of candidates) {
     try {
       const apiUrl = `${PRODUCER_API}/show-list/?shows=${encodeURIComponent(trySlug)}&available=public&type=episode&page_size=20`;
       const res = await fetch(apiUrl, { headers: { Accept: 'application/json' } });
