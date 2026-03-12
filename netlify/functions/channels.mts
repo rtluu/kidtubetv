@@ -24,6 +24,12 @@ interface ChannelSearchResult {
 const STORE_NAME = 'channels';
 const BLOB_KEY = 'subscribed';
 
+// Hard-coded slug corrections for shows where pbskids.org URL slug ≠ PBS API slug.
+const SLUG_OVERRIDES: Record<string, string> = {
+  'mister-rogers-neighborhood': 'mister-rogers',
+  'clifford-the-big-red-dog': 'clifford-big-red-dog',
+};
+
 const INNERTUBE_CONTEXT = {
   context: {
     client: {
@@ -215,8 +221,9 @@ async function normalizePBSSlug(slug: string): Promise<{ slug: string; firstEp: 
 }
 
 async function subscribePBSShow(rawSlug: string): Promise<SubscribedChannel | null> {
-  // Normalize: find the PBS API slug that actually returns episodes
-  const { slug, firstEp } = await normalizePBSSlug(rawSlug);
+  // Apply hard-coded override first, then normalize via API probing
+  const correctedInput = SLUG_OVERRIDES[rawSlug] ?? rawSlug;
+  const { slug, firstEp } = await normalizePBSSlug(correctedInput);
 
   // Require at least one episode to confirm the show exists
   if (!firstEp) return null;

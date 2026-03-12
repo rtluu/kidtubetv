@@ -21,6 +21,14 @@ interface Video {
 
 const PRODUCER_API = 'https://producerplayer.services.pbskids.org';
 
+// Hard-coded slug corrections for shows where pbskids.org URL slug ≠ PBS API slug.
+// These override the slug BEFORE the fallback algorithm runs, guaranteeing correct
+// results even if the fallback can't find the right slug within the timeout window.
+const SLUG_OVERRIDES: Record<string, string> = {
+  'mister-rogers-neighborhood': 'mister-rogers',
+  'clifford-the-big-red-dog': 'clifford-big-red-dog',
+};
+
 function extractPartnerToken(playerCode: string): string {
   if (!playerCode) return '';
   const match = /partnerplayer\/([^/?'"]+)/.exec(playerCode);
@@ -145,8 +153,11 @@ export default async (request: Request, _context: Context) => {
     });
   }
 
+  // Apply hard-coded slug override before fallback algorithm
+  const effectiveSlug = SLUG_OVERRIDES[showSlug] ?? showSlug;
+
   try {
-    const results = await fetchEpisodesWithSlugFallback(showSlug);
+    const results = await fetchEpisodesWithSlugFallback(effectiveSlug);
 
     // First pass: collect raw episode data (up to 20)
     const rawItems: { ep: any; ursUrl: string; token: string }[] = [];
