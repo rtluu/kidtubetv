@@ -11,6 +11,7 @@ interface SubscribedChannel {
   sortOrder: number;
   source?: 'youtube' | 'pbskids';
   pbsShowSlug?: string;
+  youtubePlaylistId?: string;
 }
 
 interface ChannelSearchResult {
@@ -39,13 +40,22 @@ const INNERTUBE_CONTEXT = {
   },
 };
 
-function classifyInput(input: string): { type: 'channelId' | 'handle' | 'slug' | 'search' | 'pbskids'; value: string } {
+function classifyInput(input: string): { type: 'channelId' | 'handle' | 'slug' | 'search' | 'pbskids' | 'playlist'; value: string } {
   const trimmed = input.trim();
 
   // PBS Kids URL: pbskids.org/videos/arthur or pbskids.org/arthur
   const pbsMatch = trimmed.match(/pbskids\.org\/(?:videos\/)?([a-z][a-z0-9-]*)/i);
   if (pbsMatch) {
     return { type: 'pbskids', value: pbsMatch[1].toLowerCase() };
+  }
+
+  // YouTube playlist URL (?list=PLxxxx) or bare playlist ID
+  const playlistUrlMatch = trimmed.match(/[?&]list=(PL[\w-]+)/i);
+  if (playlistUrlMatch) {
+    return { type: 'playlist', value: playlistUrlMatch[1] };
+  }
+  if (/^PL[\w-]{10,}$/.test(trimmed)) {
+    return { type: 'playlist', value: trimmed };
   }
 
   // UCxxx style (channel ID)
@@ -116,6 +126,62 @@ async function browseChannel(browseId: string): Promise<SubscribedChannel | null
     thumbnailUrl,
     subscribedAt: Date.now(),
     sortOrder: 0,
+  };
+}
+
+async function browsePlaylist(playlistId: string): Promise<SubscribedChannel | null> {
+  const res = await fetch('https://www.youtube.com/youtubei/v1/browse', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...INNERTUBE_CONTEXT, browseId: `VL${playlistId}` }),
+  });
+
+  if (!res.ok) return null;
+  const data = await res.json();
+
+  const header = data?.header?.playlistHeaderRenderer;
+  if (!header) return null;
+
+  const title: string =
+    header.title?.simpleText ??
+    header.title?.runs?.[0]?.text ??
+    'Playlist';
+
+  // Thumbnail: try header first, then fall back to first video thumbnail
+  let thumbnailUrl = '';
+  const headerThumbs: any[] = header.thumbnail?.thumbnails ?? [];
+  if (headerThumbs.length > 0) {
+    thumbnailUrl = headerThumbs[headerThumbs.length - 1].url ?? '';
+  }
+  if (!thumbnailUrl) {
+    const tabs: any[] = data?.contents?.twoColumnBrowseResultsRenderer?.tabs ?? [];
+    outer: for (const tab of tabs) {
+      const sections = tab?.tabRenderer?.content?.sectionListRenderer?.contents ?? [];
+      for (const section of sections) {
+        const plItems: any[] =
+          section?.itemSectionRenderer?.contents?.[0]?.playlistVideoListRenderer?.contents ?? [];
+        if (plItems.length > 0) {
+          const firstVr = plItems[0]?.playlistVideoRenderer;
+          if (firstVr?.videoId) {
+            thumbnailUrl = `https://img.youtube.com/vi/${firstVr.videoId}/mqdefault.jpg`;
+          }
+          break outer;
+        }
+      }
+    }
+  }
+
+  const id = `ytpl-${playlistId}`;
+  return {
+    id,
+    youtubeChannelId: id,
+    handle: playlistId,
+    title,
+    thumbnailUrl,
+    subscribedAt: Date.now(),
+    sortOrder: 0,
+    source: 'youtube',
+    youtubePlaylistId: playlistId,
   };
 }
 
@@ -285,6 +351,31 @@ export default async (request: Request, _context: Context) => {
         // Search path: no blob access needed
         const results = await searchChannels(classified.value);
         return new Response(JSON.stringify({ results }), { status: 200, headers });
+      }
+
+      if (classified.type === 'playlist') {
+        const channel = await browsePlaylist(classified.value);
+        if (!channel) {
+          return new Response(
+            JSON.stringify({ error: 'Could not find YouTube playlist. Try pasting the full playlist URL.' }),
+            { status: 404, headers }
+          );
+        }
+
+        const store = getStore({ name: STORE_NAME, consistency: 'strong' });
+        const raw = await store.get(BLOB_KEY);
+        const channels: SubscribedChannel[] = raw ? JSON.parse(raw) : [];
+
+        const existing = channels.find((c) => c.id === channel.id);
+        if (existing) {
+          return new Response(JSON.stringify({ channel: existing }), { status: 200, headers });
+        }
+
+        channel.sortOrder = channels.length;
+        channels.push(channel);
+        await store.set(BLOB_KEY, JSON.stringify(channels));
+
+        return new Response(JSON.stringify({ channel }), { status: 201, headers });
       }
 
       if (classified.type === 'pbskids') {

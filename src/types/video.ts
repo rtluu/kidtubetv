@@ -79,15 +79,16 @@ export interface AppConfig {
 }
 
 export interface SubscribedChannel {
-  id: string;               // youtube: UCxxx, pbs: pbs-arthur
-  youtubeChannelId: string; // same as id
-  handle: string;           // youtube: "@CartoonNetwork", pbs: show slug
+  id: string;                  // youtube: UCxxx, playlist: ytpl-PLxxx, pbs: pbs-arthur
+  youtubeChannelId: string;    // same as id
+  handle: string;              // youtube: "@CartoonNetwork", playlist: PLxxx, pbs: show slug
   title: string;
   thumbnailUrl: string;
   subscribedAt: number;
   sortOrder: number;
   source?: 'youtube' | 'pbskids';
-  pbsShowSlug?: string;     // e.g. 'arthur'
+  pbsShowSlug?: string;        // e.g. 'arthur'
+  youtubePlaylistId?: string;  // e.g. 'PLxxxxxx' — set when subscribed via playlist URL
 }
 
 export interface ChannelSearchResult {

@@ -28,7 +28,7 @@ const INNERTUBE_CONTEXT = {
   },
 };
 
-// InnerTube "Videos" tab param
+// InnerTube "Videos" tab param (for channel latest videos)
 const VIDEOS_TAB_PARAM = 'EgZ2aWRlb3PyBgQKAjoA';
 
 function parseDuration(text: string): number {
@@ -38,6 +38,147 @@ function parseDuration(text: string): number {
   if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
   if (parts.length === 2) return parts[0] * 60 + parts[1];
   return 0;
+}
+
+async function fetchChannelVideos(channelId: string): Promise<Video[]> {
+  const res = await fetch('https://www.youtube.com/youtubei/v1/browse', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...INNERTUBE_CONTEXT,
+      browseId: channelId,
+      params: VIDEOS_TAB_PARAM,
+    }),
+  });
+
+  if (!res.ok) return [];
+
+  const data = await res.json();
+  const videos: Video[] = [];
+
+  // Navigate to richGridRenderer contents
+  const tabs: any[] = data?.contents?.twoColumnBrowseResultsRenderer?.tabs ?? [];
+  let richItems: any[] = [];
+
+  for (const tab of tabs) {
+    const content = tab?.tabRenderer?.content;
+    if (!content) continue;
+    const items = content?.richGridRenderer?.contents;
+    if (items) {
+      richItems = items;
+      break;
+    }
+  }
+
+  for (let i = 0; i < richItems.length; i++) {
+    const item = richItems[i];
+    const vr = item?.richItemRenderer?.content?.videoRenderer;
+    if (!vr || !vr.videoId) continue;
+
+    const titleRuns: any[] = vr.title?.runs ?? [];
+    const title: string = titleRuns.map((r: any) => r.text ?? '').join('') || 'Untitled';
+
+    const thumbnails: any[] = vr.thumbnail?.thumbnails ?? [];
+    const thumbnailUrl: string =
+      thumbnails.length > 0
+        ? thumbnails[thumbnails.length - 1].url
+        : `https://img.youtube.com/vi/${vr.videoId}/mqdefault.jpg`;
+
+    const durationText: string = vr.lengthText?.simpleText ?? '';
+    const duration = parseDuration(durationText);
+    const viewCount: string = vr.shortViewCountText?.simpleText ?? '';
+
+    videos.push({
+      id: `yt-${vr.videoId}`,
+      title,
+      description: '',
+      source: 'youtube',
+      youtubeVideoId: vr.videoId,
+      thumbnailUrl,
+      duration,
+      channelId,
+      networkId: 'youtube',
+      categoryIds: [],
+      tags: [],
+      ageRange: { min: 2, max: 12 },
+      viewCount: viewCount || undefined,
+      sortOrder: i,
+      isActive: true,
+      isFreebie: true,
+    });
+
+    if (videos.length >= 20) break;
+  }
+
+  return videos;
+}
+
+async function fetchPlaylistVideos(playlistId: string, channelId: string): Promise<Video[]> {
+  const res = await fetch('https://www.youtube.com/youtubei/v1/browse', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...INNERTUBE_CONTEXT, browseId: `VL${playlistId}` }),
+  });
+
+  if (!res.ok) return [];
+
+  const data = await res.json();
+  const videos: Video[] = [];
+
+  // Navigate to playlistVideoListRenderer contents
+  const tabs: any[] = data?.contents?.twoColumnBrowseResultsRenderer?.tabs ?? [];
+  let plItems: any[] = [];
+
+  outer: for (const tab of tabs) {
+    const sections = tab?.tabRenderer?.content?.sectionListRenderer?.contents ?? [];
+    for (const section of sections) {
+      const items: any[] =
+        section?.itemSectionRenderer?.contents?.[0]?.playlistVideoListRenderer?.contents ?? [];
+      if (items.length > 0) {
+        plItems = items;
+        break outer;
+      }
+    }
+  }
+
+  for (let i = 0; i < plItems.length; i++) {
+    const vr = plItems[i]?.playlistVideoRenderer;
+    if (!vr || !vr.videoId) continue;
+
+    const titleRuns: any[] = vr.title?.runs ?? [];
+    const title: string = titleRuns.map((r: any) => r.text ?? '').join('') || 'Untitled';
+
+    const thumbnails: any[] = vr.thumbnail?.thumbnails ?? [];
+    const thumbnailUrl: string =
+      thumbnails.length > 0
+        ? thumbnails[thumbnails.length - 1].url
+        : `https://img.youtube.com/vi/${vr.videoId}/mqdefault.jpg`;
+
+    const durationText: string = vr.lengthText?.simpleText ?? '';
+    const duration = parseDuration(durationText);
+
+    videos.push({
+      id: `yt-${vr.videoId}`,
+      title,
+      description: '',
+      source: 'youtube',
+      youtubeVideoId: vr.videoId,
+      thumbnailUrl,
+      duration,
+      channelId,
+      networkId: 'youtube',
+      categoryIds: [],
+      tags: [],
+      ageRange: { min: 2, max: 12 },
+      sortOrder: i,
+      isActive: true,
+      isFreebie: true,
+    });
+
+    if (videos.length >= 50) break;
+  }
+
+  return videos;
 }
 
 export default async (request: Request, _context: Context) => {
@@ -53,78 +194,10 @@ export default async (request: Request, _context: Context) => {
   }
 
   try {
-    const res = await fetch('https://www.youtube.com/youtubei/v1/browse', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...INNERTUBE_CONTEXT,
-        browseId: channelId,
-        params: VIDEOS_TAB_PARAM,
-      }),
-    });
-
-    if (!res.ok) {
-      return new Response(JSON.stringify([]), { status: 200, headers });
-    }
-
-    const data = await res.json();
-
-    const videos: Video[] = [];
-
-    // Navigate to richGridRenderer contents
-    const tabs: any[] = data?.contents?.twoColumnBrowseResultsRenderer?.tabs ?? [];
-    let richItems: any[] = [];
-
-    for (const tab of tabs) {
-      const content = tab?.tabRenderer?.content;
-      if (!content) continue;
-      const items = content?.richGridRenderer?.contents;
-      if (items) {
-        richItems = items;
-        break;
-      }
-    }
-
-    for (let i = 0; i < richItems.length; i++) {
-      const item = richItems[i];
-      const vr = item?.richItemRenderer?.content?.videoRenderer;
-      if (!vr || !vr.videoId) continue;
-
-      const titleRuns: any[] = vr.title?.runs ?? [];
-      const title: string = titleRuns.map((r: any) => r.text ?? '').join('') || 'Untitled';
-
-      const thumbnails: any[] = vr.thumbnail?.thumbnails ?? [];
-      const thumbnailUrl: string =
-        thumbnails.length > 0
-          ? thumbnails[thumbnails.length - 1].url
-          : `https://img.youtube.com/vi/${vr.videoId}/mqdefault.jpg`;
-
-      const durationText: string = vr.lengthText?.simpleText ?? '';
-      const duration = parseDuration(durationText);
-
-      const viewCount: string = vr.shortViewCountText?.simpleText ?? '';
-
-      videos.push({
-        id: `yt-${vr.videoId}`,
-        title,
-        description: '',
-        source: 'youtube',
-        youtubeVideoId: vr.videoId,
-        thumbnailUrl,
-        duration,
-        channelId,
-        networkId: 'youtube',
-        categoryIds: [],
-        tags: [],
-        ageRange: { min: 2, max: 12 },
-        viewCount: viewCount || undefined,
-        sortOrder: i,
-        isActive: true,
-        isFreebie: true,
-      });
-
-      if (videos.length >= 20) break;
-    }
+    // ytpl- prefix indicates a YouTube playlist subscription
+    const videos = channelId.startsWith('ytpl-')
+      ? await fetchPlaylistVideos(channelId.slice(5), channelId)
+      : await fetchChannelVideos(channelId);
 
     return new Response(JSON.stringify(videos), { status: 200, headers });
   } catch {
