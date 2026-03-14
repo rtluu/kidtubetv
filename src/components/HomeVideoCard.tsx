@@ -482,11 +482,11 @@ export default function HomeVideoCard({
           ) : (
             <Image source={{ uri: video.thumbnailUrl }} style={styles.thumbnail} />
           )}
-          {!showInlinePlayer && (
-            <View style={styles.durationBadge}>
-              <Text style={styles.durationText}>{formatDuration(video.duration)}</Text>
-            </View>
-          )}
+          <View style={styles.durationBadge}>
+            <Text style={styles.durationText}>
+              {showInlinePlayer ? 'Preview' : formatDuration(video.duration)}
+            </Text>
+          </View>
         </View>
         <View style={styles.info}>
           {channel && (
