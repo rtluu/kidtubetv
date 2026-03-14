@@ -48,6 +48,83 @@ interface ChannelSection {
   videos: Video[];
 }
 
+// Horizontal row with left/right arrow pagination
+function RowScroller({ children }: { children: React.ReactNode }) {
+  const scrollRef = useRef<ScrollView>(null);
+  const [scrollX, setScrollX] = useState(0);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const [contentWidth, setContentWidth] = useState(0);
+
+  const canScrollLeft = scrollX > 4;
+  const canScrollRight = contentWidth > 0 && scrollX < contentWidth - containerWidth - 4;
+
+  return (
+    <View style={{ position: 'relative' }}>
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.rowList}
+        onScroll={(e) => setScrollX(e.nativeEvent.contentOffset.x)}
+        scrollEventThrottle={16}
+        onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
+        onContentSizeChange={(w) => setContentWidth(w)}
+      >
+        {children}
+      </ScrollView>
+
+      {canScrollLeft && (
+        <View style={[rowArrowStyles.side, rowArrowStyles.left]}>
+          <Pressable
+            style={rowArrowStyles.btn}
+            onPress={() => scrollRef.current?.scrollTo({ x: Math.max(0, scrollX - containerWidth), animated: true })}
+          >
+            <FontAwesome name="chevron-left" size={13} color="#fff" />
+          </Pressable>
+        </View>
+      )}
+      {canScrollRight && (
+        <View style={[rowArrowStyles.side, rowArrowStyles.right]}>
+          <Pressable
+            style={rowArrowStyles.btn}
+            onPress={() => scrollRef.current?.scrollTo({ x: scrollX + containerWidth, animated: true })}
+          >
+            <FontAwesome name="chevron-right" size={13} color="#fff" />
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const rowArrowStyles = StyleSheet.create({
+  side: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  left: { left: 0 },
+  right: { right: 0 },
+  btn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(15,12,48,0.82)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.6,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+});
+
 function ViewModeButton({
   icon,
   label,
@@ -456,18 +533,14 @@ export default function HomeScreen() {
             return (
               <View key={section.channel.id} style={styles.channelSection}>
                 <Text style={styles.channelSectionTitle}>{section.channel.title}</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.rowList}
-                >
+                <RowScroller>
                   {sectionLoading && section.videos.length === 0
                     ? Array.from({ length: 5 }, (_, i) => <SkeletonCard key={i} width={rowCardWidth} />)
                     : section.videos.map((video) =>
                         renderVideoCard(video, section.channel, 'rows', rowCardWidth, `${section.channel.id}:${video.id}`)
                       )
                   }
-                </ScrollView>
+                </RowScroller>
               </View>
             );
           })}
