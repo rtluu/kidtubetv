@@ -23,6 +23,26 @@ import ShowDrawer from '@src/components/ShowDrawer';
 
 type ViewMode = 'rows' | 'feed' | 'grid';
 
+function SkeletonCard({ width }: { width: number }) {
+  const height = Math.round(width * (9 / 16));
+  return (
+    <View style={[skeletonStyles.card, { width, marginRight: spacing.sm }]}>
+      <View style={[skeletonStyles.thumb, { height }]} />
+      <View style={skeletonStyles.info}>
+        <View style={[skeletonStyles.line, { width: '80%' }]} />
+        <View style={[skeletonStyles.line, { width: '55%', marginTop: 6 }]} />
+      </View>
+    </View>
+  );
+}
+
+const skeletonStyles = StyleSheet.create({
+  card: { backgroundColor: colors.card, borderRadius: borderRadius.md, overflow: 'hidden', marginBottom: spacing.sm },
+  thumb: { width: '100%', backgroundColor: 'rgba(255,255,255,0.07)' },
+  info: { padding: spacing.sm },
+  line: { height: 10, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.07)' },
+});
+
 interface ChannelSection {
   channel: SubscribedChannel | { id: string; title: string; thumbnailUrl: string; networkId: string };
   videos: Video[];
@@ -166,7 +186,7 @@ export default function HomeScreen() {
   });
 
   // Fetch videos for each subscribed channel
-  useQueries({
+  const channelVideoQueries = useQueries({
     queries: subscribedChannels.map((ch) => ({
       queryKey: ['channelVideos', ch.id],
       queryFn: async () => {
@@ -178,6 +198,15 @@ export default function HomeScreen() {
       retry: 1,
     })),
   });
+
+  // Track which channels are still fetching (for skeleton placeholders)
+  const loadingChannelIds = useMemo(() => {
+    const ids = new Set<string>();
+    subscribedChannels.forEach((ch, i) => {
+      if (channelVideoQueries[i]?.isLoading) ids.add(ch.id);
+    });
+    return ids;
+  }, [channelVideoQueries, subscribedChannels]);
 
   // Build channelMap from subscribed channels
   const channelMap = useMemo(() => {
@@ -226,12 +255,11 @@ export default function HomeScreen() {
       });
     });
 
-    // Build channel sections
+    // Build channel sections — include channels with no videos yet (still loading)
     const channelSectionMap = new Map<string, ChannelSection>();
     subscribedChannels.forEach((ch) => {
       if (hiddenSet.has(ch.id)) return;
       const videos = channelVideos[ch.id] ?? [];
-      if (videos.length === 0) return;
       const title = titleOverrides[ch.id] ?? ch.title;
       channelSectionMap.set(ch.id, {
         channel: { ...ch, title },
@@ -411,7 +439,7 @@ export default function HomeScreen() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator color={colors.primary} size="large" />
         </View>
-      ) : channelSections.length === 0 && subscribedChannels.length === 0 ? (
+      ) : subscribedChannels.length === 0 ? (
         <View style={styles.emptyContainer}>
           <FontAwesome name="television" size={48} color={colors.textSecondary} />
           <Text style={styles.emptyTitle}>No Channels Yet</Text>
@@ -421,20 +449,28 @@ export default function HomeScreen() {
         </View>
       ) : viewMode === 'rows' ? (
         <ScrollView style={styles.content}>
-          {channelSections.map((section) => (
-            <View key={section.channel.id} style={styles.channelSection}>
-              <Text style={styles.channelSectionTitle}>{section.channel.title}</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.rowList}
-              >
-                {section.videos.map((video) =>
-                  renderVideoCard(video, section.channel, 'rows', rowCardWidth, `${section.channel.id}:${video.id}`)
-                )}
-              </ScrollView>
-            </View>
-          ))}
+          {channelSections.map((section) => {
+            const sectionLoading = loadingChannelIds.has(section.channel.id);
+            // Hide sections that finished loading with no videos (empty/unavailable channel)
+            if (section.videos.length === 0 && !sectionLoading) return null;
+            return (
+              <View key={section.channel.id} style={styles.channelSection}>
+                <Text style={styles.channelSectionTitle}>{section.channel.title}</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.rowList}
+                >
+                  {sectionLoading && section.videos.length === 0
+                    ? Array.from({ length: 5 }, (_, i) => <SkeletonCard key={i} width={rowCardWidth} />)
+                    : section.videos.map((video) =>
+                        renderVideoCard(video, section.channel, 'rows', rowCardWidth, `${section.channel.id}:${video.id}`)
+                      )
+                  }
+                </ScrollView>
+              </View>
+            );
+          })}
         </ScrollView>
       ) : viewMode === 'feed' ? (
         <ScrollView style={styles.content} contentContainerStyle={styles.feedList}>
